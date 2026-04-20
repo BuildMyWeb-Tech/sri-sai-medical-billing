@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          String    @id
+  name        String
+  email       String
+  image       String
+  cart        Json      @default("{}")
+  Address     Address[]
+  buyerOrders Order[]   @relation("BuyerRelation")
+  ratings     Rating[]
+  store       Store?
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  image       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String   @default("ADMIN")
+  storeId     String?
+  store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([name, storeId])
+  @@index([storeId])
+  @@index([createdBy])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  mrp         Float
+  price       Float
+  images      String[]
+  category    String[]
+  quantity    Int      @default(0)
+  inStock     Boolean  @default(true)
+  storeId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  keyFeatures String[] @default([])
+  createdBy   String   @default("STORE")
+
+  // ── POS / Billing fields ──────────────────────────────────────
+  // NOTE: barcode is now on ProductVariant, not here
+  sku         String?
+
+  inventory   Inventory[]
+  orderItems  OrderItem[]
+  billItems   BillItem[]
+  variants    ProductVariant[]
+  store       Store?      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  rating      Rating[]
+
+  @@index([storeId])
+  @@index([createdBy])
+  @@index([inStock])
+  @@index([sku])
+}
+
+// ── Product Variants (size/barcode/price/stock per variant) ───────
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+
+  size      String
+  price     Float
+  barcode   String  @unique
+  stock     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  billItems BillItem[]
+
+  @@index([productId])
+  @@index([barcode])
+  @@index([stock])
+}
+
+model Inventory {
+  id        String   @id @default(cuid())
+  productId String
+  storeId   String
+  quantity  Int      @default(0)
+  lowStock  Int      @default(10)
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, storeId])
+  @@index([storeId])
+  @@index([productId])
+  @@index([quantity])
+}
+
+model Order {
+  id            String          @id @default(cuid())
+  total         Float
+  status        OrderStatus     @default(ORDER_PLACED)
+  userId        String
+  storeId       String
+  addressId     String
+  isPaid        Boolean         @default(false)
+  paymentMethod PaymentMethod
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  isCouponUsed  Boolean         @default(false)
+  coupon        Json            @default("{}")
+  address       Address         @relation(fields: [addressId], references: [id])
+  store         Store           @relation(fields: [storeId], references: [id])
+  user          User            @relation("BuyerRelation", fields: [userId], references: [id])
+  orderItems    OrderItem[]
+  timeline      OrderTimeline[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model OrderTimeline {
+  id        String      @id @default(cuid())
+  orderId   String
+  status    OrderStatus
+  changedBy String
+  note      String?
+  createdAt DateTime    @default(now())
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@id([orderId, productId])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  rating    Int
+  review    String
+  userId    String
+  productId String
+  orderId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, orderId])
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  street    String
+  city      String
+  state     String
+  zip       String
+  country   String
+  phone     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Order     Order[]
+}
+
+model Coupon {
+  code        String   @id
+  description String
+  discount    Float
+  forNewUser  Boolean
+  forMember   Boolean  @default(false)
+  isPublic    Boolean
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}
+
+model Store {
+  id          String      @id @default(cuid())
+  userId      String      @unique
+  name        String
+  description String
+  username    String      @unique
+  address     String
+  status      String      @default("pending")
+  isActive    Boolean     @default(false)
+  logo        String
+  email       String
+  contact     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  Category    Category[]
+  Employee    Employee[]
+  Inventory   Inventory[]
+  Order       Order[]
+  Product     Product[]
+  Sale        Sale[]
+  Bill        Bill[]
+  user        User        @relation(fields: [userId], references: [id])
+
+  StoreSettings StoreSettings?
+}
+
+// ── POS Billing Models ────────────────────────────────────────────────────────
+
+model Bill {
+  id          String     @id @default(cuid())
+  billNumber  String
+  storeId     String
+  subtotal    Float
+  discount    Float      @default(0)
+  taxAmount   Float      @default(0)
+  total       Float
+  paymentMode String     @default("CASH")
+  note        String?
+  createdAt   DateTime   @default(now())
+  employeeId  String?    // ← ADD THIS
+
+  items       BillItem[]
+  store       Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee    Employee?  @relation(fields: [employeeId], references: [id])  // ← ADD THIS
+
+  @@index([storeId])
+  @@index([createdAt])
+  @@index([billNumber])
+  @@index([storeId, createdAt])
+  @@index([employeeId])   // ← ADD THIS
+}
+
+model BillItem {
+  id        String  @id @default(cuid())
+  billId    String
+  productId String
+  variantId String?   // ← nullable so old bills without variants still work
+  name      String
+  size      String?   // ← variant size label (S, M, L, XL …)
+  price     Float
+  quantity  Int
+  discount  Float   @default(0)
+  total     Float
+
+  bill      Bill           @relation(fields: [billId], references: [id], onDelete: Cascade)
+  product   Product        @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([billId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Sale {
+  id          String     @id @default(cuid())
+  storeId     String
+  amount      Float
+  source      SaleSource @default(ORDER)
+  referenceId String
+  createdAt   DateTime   @default(now())
+  employeeId  String?    // ← ADD THIS
+
+  store       Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee    Employee?  @relation(fields: [employeeId], references: [id])  // ← ADD THIS
+
+  @@index([storeId])
+  @@index([createdAt])
+  @@index([storeId, createdAt])
+  @@index([source])
+  @@index([referenceId])
+  @@index([employeeId])   // ← ADD THIS
+}
+
+model Employee {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String
+  storeId     String
+  role        String
+  permissions Json     @default("{}")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  bills       Bill[]   // ← ADD THIS
+  sales       Sale[]   // ← ADD THIS
+
+  @@index([storeId])
+}
+
+model StoreSettings {
+  id              String   @id @default(cuid())
+  storeId         String   @unique
+  storeName       String
+  gstNumber       String?
+  address         String
+  taxType         String   @default("SINGLE")
+  taxPercent      Float?   @default(18)
+  cgst            Float?   @default(9)
+  sgst            Float?   @default(9)
+  currency        String   @default("INR")
+  showStoreName   Boolean  @default(true)
+  showGST         Boolean  @default(true)
+  footerMessage   String?  @default("Thank you for shopping with us!")
+  defaultLowStock Int      @default(10)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+enum OrderStatus {
+  ORDER_PLACED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CONFIRMED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  COD
+  STRIPE
+}
+
+enum SaleSource {
+  ORDER
+  BILLING
+}

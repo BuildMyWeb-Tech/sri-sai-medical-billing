@@ -87,7 +87,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Recent Activity */}
-            <div className="mb-8 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+            {/* <div className="mb-8 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="font-semibold text-slate-800 text-lg">Recent Activity</h2>
                     <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full font-medium">Today</span>
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
                         </div>
                     ))}
                 </div>
-            </div>
+            </div> */}
 
             {/* Area Chart */}
             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">

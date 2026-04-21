@@ -395,20 +395,356 @@ function browserPrintFallback(bill, settings = {}) {
       currency: cur,
       minimumFractionDigits: 2,
     }).format(parseFloat(n || 0));
-  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN');
+  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  });
+
   const itemRows = (bill.items || [])
-    .map(
-      (it) =>
-        `<tr><td style="padding:3px 2px;border-bottom:1px dotted #ddd">${it.name}${it.size ? ` <span style="font-size:10px;background:#eee;padding:1px 4px;border-radius:3px">${it.size}</span>` : ''}</td><td style="padding:3px 2px;border-bottom:1px dotted #ddd;text-align:center">${it.quantity}</td><td style="padding:3px 2px;border-bottom:1px dotted #ddd;text-align:right">${fmtN(it.price)}</td><td style="padding:3px 2px;border-bottom:1px dotted #ddd;text-align:right">${fmtN(it.total)}</td></tr>`
-    )
+    .map((it) => {
+      const displayName = it.size ? `${it.name} [${it.size}]` : it.name;
+      return `
+        <tr>
+          <td class="item-name">${displayName}</td>
+          <td class="col-qty">${it.quantity}</td>
+          <td class="col-rate">${fmtN(it.price)}</td>
+          <td class="col-amt">${fmtN(it.total)}</td>
+        </tr>`;
+    })
     .join('');
+
   let taxRows = '';
-  if (s.taxType === 'GST_SPLIT' && parseFloat(bill.taxAmount) > 0)
-    taxRows = `<tr><td colspan="3" style="padding:2px">CGST (${s.cgst}%)</td><td style="text-align:right;padding:2px">${fmtN(bill.taxAmount / 2)}</td></tr><tr><td colspan="3" style="padding:2px">SGST (${s.sgst}%)</td><td style="text-align:right;padding:2px">${fmtN(bill.taxAmount / 2)}</td></tr>`;
-  else if (parseFloat(bill.taxAmount) > 0)
-    taxRows = `<tr><td colspan="3" style="padding:2px">Tax (${s.taxPercent || 0}%)</td><td style="text-align:right;padding:2px">${fmtN(bill.taxAmount)}</td></tr>`;
-  const html = `<!DOCTYPE html><html><head><title>${bill.billNumber}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:12px;max-width:302px;margin:0 auto;padding:6px 4px}h2{text-align:center;font-size:15px;margin:4px 0}.c{text-align:center}.m{text-align:center;font-size:11px;color:#555;margin:2px 0}.d{border-top:1px dashed #aaa;margin:5px 0}table{width:100%;border-collapse:collapse}th{font-size:10px;border-bottom:1px solid #aaa;padding:3px 2px;text-align:left}.tr td{font-weight:bold;font-size:14px;border-top:2px solid #111;padding:5px 2px}.foot{text-align:center;margin-top:8px;font-size:11px;color:#777;border-top:1px dashed #aaa;padding-top:6px}@media print{body{max-width:100%}@page{margin:2mm;size:80mm auto}}</style></head><body>${s.showStoreName !== false && s.storeName ? `<h2>${s.storeName}</h2>` : ''} ${s.address ? `<p class="m">${s.address}</p>` : ''} ${s.showGST && s.gstNumber ? `<p class="m">GST: ${s.gstNumber}</p>` : ''}<div class="d"></div><p class="m"><strong>${bill.billNumber}</strong></p><p class="m">${dateStr}</p><p class="m">Payment: <strong>${bill.paymentMode}</strong></p>${bill.note ? `<p class="m">Note: ${bill.note}</p>` : ''}<div class="d"></div><table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amt</th></tr></thead><tbody>${itemRows}</tbody><tfoot><tr><td colspan="3" style="padding:2px">Subtotal</td><td style="text-align:right;padding:2px">${fmtN(bill.subtotal)}</td></tr>${parseFloat(bill.discount) > 0 ? `<tr><td colspan="3" style="padding:2px;color:#c00">Discount</td><td style="text-align:right;padding:2px;color:#c00">-${fmtN(bill.discount)}</td></tr>` : ''}${taxRows}<tr class="tr"><td colspan="3">TOTAL</td><td style="text-align:right">${fmtN(bill.total)}</td></tr></tfoot></table>${s.footerMessage ? `<div class="foot">${s.footerMessage}</div>` : '<div class="foot">Thank You! Visit Again</div>'}<script>window.onload=function(){window.print();setTimeout(function(){window.close();},600);};<\/script></body></html>`;
-  const win = window.open('', '_blank', 'width=380,height=620');
+  if (s.taxType === 'GST_SPLIT' && parseFloat(bill.taxAmount) > 0) {
+    taxRows = `
+      <tr class="summary-row">
+        <td colspan="3">CGST (${s.cgst}%)</td>
+        <td class="col-amt">${fmtN(bill.taxAmount / 2)}</td>
+      </tr>
+      <tr class="summary-row">
+        <td colspan="3">SGST (${s.sgst}%)</td>
+        <td class="col-amt">${fmtN(bill.taxAmount / 2)}</td>
+      </tr>`;
+  } else if (parseFloat(bill.taxAmount) > 0) {
+    taxRows = `
+      <tr class="summary-row">
+        <td colspan="3">Tax (${s.taxPercent || 0}%)</td>
+        <td class="col-amt">${fmtN(bill.taxAmount)}</td>
+      </tr>`;
+  }
+
+  const discountRow = parseFloat(bill.discount) > 0 ? `
+    <tr class="summary-row">
+      <td colspan="3">Discount</td>
+      <td class="col-amt">-${fmtN(bill.discount)}</td>
+    </tr>` : '';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${bill.billNumber}</title>
+<style>
+  /* ── Reset & Page Setup ── */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
+  }
+
+  html, body {
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  body {
+    font-family: Arial, Helvetica, 'Liberation Sans', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Wrapper ── */
+  .receipt {
+    width: 76mm;
+    margin: 0 auto;
+    padding: 4mm 0 6mm 0;
+  }
+
+  /* ── Header ── */
+  .store-name {
+    text-align: center;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    color: #000;
+    margin-bottom: 1.5mm;
+    text-transform: uppercase;
+  }
+
+  .store-address {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #000;
+    line-height: 1.4;
+    margin-bottom: 1mm;
+  }
+
+  .store-gst {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 1.5mm;
+  }
+
+  /* ── Dividers ── */
+  .divider-dash {
+    border: none;
+    border-top: 1.5px dashed #000;
+    margin: 2mm 0;
+  }
+
+  .divider-solid {
+    border: none;
+    border-top: 2px solid #000;
+    margin: 2mm 0;
+  }
+
+  .divider-double {
+    border: none;
+    border-top: 3px double #000;
+    margin: 2mm 0;
+  }
+
+  /* ── Bill Meta ── */
+  .meta-block {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #000;
+    line-height: 1.6;
+  }
+
+  .meta-block .bill-no {
+    font-size: 11px;
+    font-weight: 800;
+    color: #000;
+  }
+
+  /* ── Items Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  thead tr {
+    border-bottom: 1.5px solid #000;
+  }
+
+  thead th {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #000;
+    padding: 1.5mm 0;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+  }
+
+  th.col-item  { text-align: left;  width: 44%; }
+  th.col-qty   { text-align: center; width: 10%; }
+  th.col-rate  { text-align: right; width: 23%; }
+  th.col-amt   { text-align: right; width: 23%; }
+
+  tbody tr {
+    border-bottom: 0.75px dashed #555;
+  }
+
+  tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  tbody td {
+    font-size: 11px;
+    font-weight: 600;
+    color: #000;
+    padding: 2mm 0;
+    vertical-align: top;
+  }
+
+  td.item-name {
+    text-align: left;
+    word-break: break-word;
+    padding-right: 2mm;
+    font-weight: 700;
+  }
+
+  td.col-qty  { text-align: center; }
+  td.col-rate { text-align: right; }
+  td.col-amt  { text-align: right; font-weight: 700; }
+
+  /* ── Summary Rows ── */
+  .summary-section {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1mm;
+  }
+
+  .summary-row td {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #000;
+    padding: 1mm 0;
+  }
+
+  .summary-row td:first-child {
+    text-align: left;
+  }
+
+  .summary-row td.col-amt {
+    text-align: right;
+    font-weight: 700;
+  }
+
+  .subtotal-row td {
+    font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    padding: 1.5mm 0;
+  }
+
+  .subtotal-row td:first-child { text-align: left; }
+  .subtotal-row td.col-amt     { text-align: right; }
+
+  /* ── Grand Total ── */
+  .total-row {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .total-row td {
+    font-size: 15px;
+    font-weight: 900;
+    color: #000;
+    padding: 2mm 0 1mm 0;
+    letter-spacing: 0.3px;
+  }
+
+  .total-row td:first-child { text-align: left; }
+  .total-row td:last-child  { text-align: right; }
+
+  /* ── Note ── */
+  .note-block {
+    font-size: 10px;
+    font-weight: 600;
+    color: #000;
+    margin-top: 1.5mm;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #000;
+    margin-top: 3mm;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── Print-only: kill any browser header/footer chrome ── */
+  @media print {
+    html, body {
+      width: 80mm;
+    }
+    .receipt {
+      width: 76mm;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="receipt">
+
+  ${s.showStoreName !== false && s.storeName
+    ? `<div class="store-name">${s.storeName}</div>` : ''}
+  ${s.address
+    ? `<div class="store-address">${s.address}</div>` : ''}
+  ${s.showGST && s.gstNumber
+    ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}
+
+  <hr class="divider-dash">
+
+  <div class="meta-block">
+    <div class="bill-no">Bill No : ${bill.billNumber}</div>
+    <div>Date    : ${dateStr}</div>
+    <div>Payment : ${bill.paymentMode}</div>
+    ${bill.note ? `<div class="note-block">Note    : ${String(bill.note).slice(0, 42)}</div>` : ''}
+  </div>
+
+  <hr class="divider-dash">
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-item">Item</th>
+        <th class="col-qty">Qty</th>
+        <th class="col-rate">Rate</th>
+        <th class="col-amt">Amt</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+    </tbody>
+  </table>
+
+  <hr class="divider-solid">
+
+  <table class="summary-section">
+    <tr class="subtotal-row">
+      <td colspan="3">Subtotal</td>
+      <td class="col-amt">${fmtN(bill.subtotal)}</td>
+    </tr>
+    ${discountRow}
+    ${taxRows}
+  </table>
+
+  <hr class="divider-double">
+
+  <table class="total-row">
+    <tr>
+      <td>TOTAL</td>
+      <td>${fmtN(bill.total)}</td>
+    </tr>
+  </table>
+
+  <hr class="divider-dash">
+
+  <div class="footer">${s.footerMessage || 'Thank You! Visit Again'}</div>
+
+</div>
+<script>
+  window.onload = function () {
+    window.print();
+    setTimeout(function () { window.close(); }, 700);
+  };
+<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=380,height=680');
   if (win) {
     win.document.write(html);
     win.document.close();

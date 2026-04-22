@@ -30,7 +30,7 @@ export default function EmployeeNavbar({ storeInfo, employee, mobileOpen, setMob
         </button>
 
         <Link href="/employee/dashboard" className="relative text-3xl font-semibold text-slate-700 flex items-center">
-          <span className="text-green-600">King</span>cart
+          <span className="text-green-600">Sri Sai  </span> Medical
           <span className="text-green-600 text-4xl leading-none">.</span>
           <div className="absolute text-xs font-semibold -top-1.5 -right-16 px-2 py-0.5 rounded-full flex items-center gap-1 text-white bg-gradient-to-r from-blue-500 to-blue-600 shadow-sm whitespace-nowrap">
             <Store size={9} /> Employee
@@ -40,16 +40,16 @@ export default function EmployeeNavbar({ storeInfo, employee, mobileOpen, setMob
 
       {/* Right */}
       <div className="flex items-center gap-3">
-        <button
+        {/* <button
           onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
           className="p-1.5 rounded-full hover:bg-slate-100 text-slate-600"
         >
           {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
-        </button>
+        </button> */}
 
         <div className="hidden sm:block text-right">
           <p className="text-sm font-medium text-slate-800">{employee?.name}</p>
-          <p className="text-xs text-slate-500">{roleLabel} • {storeInfo?.name}</p>
+          <p className="text-xs text-slate-500">{roleLabel}</p>
         </div>
 
         {/* Avatar */}

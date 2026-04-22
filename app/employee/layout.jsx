@@ -100,9 +100,9 @@ export default function EmployeeLayout({ children }) {
         </div>
         <div className="flex-1 h-full overflow-y-auto bg-slate-50">
           <div className="p-5 lg:pl-12 lg:pt-12">{children}</div>
-          <div className="pb-4 text-center text-xs text-slate-400">
+          {/* <div className="pb-4 text-center text-xs text-slate-400">
             <p>© {new Date().getFullYear()} {storeInfo?.name} • Employee Portal</p>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

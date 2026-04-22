@@ -112,7 +112,7 @@ export default function EmployeeLoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-5">
+        {/* <p className="text-center text-xs text-slate-400 mt-5">
           Store owner?{' '}
           <Link href="/store" className="text-green-600 hover:underline font-medium">
             Go to store dashboard
@@ -121,7 +121,7 @@ export default function EmployeeLoginPage() {
           <Link href="/" className="text-green-600 hover:underline font-medium">
             Back to Homepage
           </Link>
-        </p>
+        </p> */}
       </div>
     </div>
   );

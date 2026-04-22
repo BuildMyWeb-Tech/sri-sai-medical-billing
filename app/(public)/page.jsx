@@ -12,12 +12,12 @@ import ProductCategories from "@/components/ProductCategories";
 export default function Home() {
     return (
         <div>
-            <Hero />
-            <ProductCategories />
-            <LatestProducts />
+            {/* <Hero /> */}
+            {/* <ProductCategories />
+            <LatestProducts /> */}
             {/* <About/> */}
-            <BestSelling />
-            <OurSpecs />
+            {/* <BestSelling />
+            <OurSpecs /> */}
             {/* <Newsletter /> */}
         </div>
     );

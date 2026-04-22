@@ -22,7 +22,7 @@ const navLinks = [
   { label: 'Add Product', href: '/admin/add-product', icon: PlusCircle },
   { label: 'Manage Products', href: '/admin/manage-product', icon: PackageSearch },
   { label: 'Inventory', href: '/admin/inventory', icon: Package },
-  { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
+  // { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
   { label: 'Sales Report', href: '/admin/sales-report', icon: BarChart2 },
 ];
 

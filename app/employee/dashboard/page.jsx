@@ -103,16 +103,16 @@ export default function EmployeeDashboard() {
             {isOwner ? 'Store Owner' : 'Employee'} • {employee.storeName || storeInfo?.name}
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2">
+        {/* <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2">
           <ShieldCheck size={16} className="text-blue-600" />
           <span className="text-sm font-medium text-blue-700">
             {isOwner ? 'Full Access' : `${accessibleModules.length} modules`}
           </span>
-        </div>
+        </div> */}
       </div>
 
       {/* Permissions summary */}
-      {!isOwner && (
+      {/* {!isOwner && (
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
           <p className="text-sm font-medium text-slate-700 mb-3">Your Permissions</p>
           <div className="flex flex-wrap gap-2">
@@ -136,7 +136,7 @@ export default function EmployeeDashboard() {
             })}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Module cards */}
       {accessibleModules.length > 0 ? (

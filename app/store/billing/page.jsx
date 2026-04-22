@@ -1007,7 +1007,7 @@ export default function StoreBillingPage() {
                 {lastScanFeedback && (
                   <span className={`text-xs font-medium px-3 py-1 rounded-full ${lastScanFeedback.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{lastScanFeedback.message}</span>
                 )}
-                <div className="text-[10px] text-slate-400">{localProducts.length} products cached</div>
+                {/* <div className="text-[10px] text-slate-400">{localProducts.length} products cached</div> */}
               </div>
               <CombinedInput
                 onScan={handleBarcodeScanned} onSearch={handleSearch}
@@ -1137,21 +1137,21 @@ export default function StoreBillingPage() {
               {/* ── END CASH CHANGE ─────────────────────────────────────────── */}
 
               {/* Note */}
-              <div>
+              {/* <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Note</h3>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Customer name, phone, or any note…" rows={2}
                   className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none placeholder:text-slate-400" />
-              </div>
+              </div> */}
 
               {/* Print indicator */}
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border ${qzStatus === 'connected' && printerName ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+              {/* <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border ${qzStatus === 'connected' && printerName ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
                 <Printer size={13} />
                 {qzStatus === 'connected' && printerName ? (
                   <><span className="font-medium">Direct print:</span> {printerName}</>
                 ) : (
                   <><span>Browser print dialog</span><button onClick={() => setShowPrintSettings(true)} className="ml-auto underline hover:text-blue-600">Set printer</button></>
                 )}
-              </div>
+              </div> */}
             </div>
 
             {/* Complete bill button — always visible, fixed at bottom of right panel */}
@@ -1170,9 +1170,9 @@ export default function StoreBillingPage() {
                   <span className="text-xs font-semibold text-green-600">Change {fmt(changeAmount)}</span>
                 </div>
               )}
-              <p className="text-center text-xs text-slate-400 mt-1.5">
+              {/* <p className="text-center text-xs text-slate-400 mt-1.5">
                 {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
-              </p>
+              </p> */}
             </div>
           </div>
         </div>

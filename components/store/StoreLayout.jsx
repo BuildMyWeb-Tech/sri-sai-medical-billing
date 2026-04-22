@@ -140,10 +140,10 @@ const StoreLayout = ({ children }) => {
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-slate-100/30 to-transparent rounded-full translate-y-1/2 -translate-x-1/2 z-0 pointer-events-none" />
             <div className="relative z-10 p-5 lg:pl-12 lg:pt-12">{children}</div>
             <div className="pb-4 text-center text-xs text-slate-400 relative z-10">
-              <p>
+              {/* <p>
                 © {new Date().getFullYear()}{' '}
                 {storeInfo?.name || 'Store Dashboard'} • All Rights Reserved
-              </p>
+              </p> */}
             </div>
           </div>
         </div>

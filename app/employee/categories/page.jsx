@@ -96,14 +96,14 @@ export default function EmployeeCategoriesPage() {
             </div>
             Product Categories
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          {/* <p className="text-slate-500 text-sm mt-1">
             <span className="text-purple-600 font-medium">Global</span> = admin categories.{' '}
             <span className="text-blue-600 font-medium">Store</span> = store categories.
-          </p>
+          </p> */}
         </div>
-        <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700 flex items-center gap-1.5">
+        {/* <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700 flex items-center gap-1.5">
           <Info size={13} className="text-blue-500" /> View only
-        </div>
+        </div> */}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">

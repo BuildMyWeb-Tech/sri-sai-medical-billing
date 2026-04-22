@@ -17,6 +17,7 @@ import {
   Users,
   LogOut,
   Receipt,
+  IndianRupee
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -43,12 +44,12 @@ const ALL_LINKS = [
     permission: 'inventory',
   },
   { name: 'Inventory', href: '/store/inventory', icon: Package, permission: 'inventory' },
-  { name: 'POS Billing', href: '/store/billing', icon: Receipt, permission: 'orders' },
-  { name: 'Orders', href: '/store/orders', icon: ShoppingBag, permission: 'orders' },
+  { name: 'POS Billing', href: '/store/billing', icon: IndianRupee, permission: 'orders' },
+  // { name: 'Orders', href: '/store/orders', icon: ShoppingBag, permission: 'orders' },
   { name: 'Sales Report', href: '/store/analytics', icon: BarChart2, permission: 'reports' },
   { name: 'Employees', href: '/store/employees', icon: Users, permission: 'settings' },
-  { name: 'Store Settings', href: '/store/settings', icon: Settings, permission: 'settings' },
-  { name: 'Help & Support', href: '/store/help', icon: HelpCircle, permission: null },
+  // { name: 'Store Settings', href: '/store/settings', icon: Settings, permission: 'settings' },
+  // { name: 'Help & Support', href: '/store/help', icon: HelpCircle, permission: null },
 ];
 
 const StoreSidebar = ({ storeInfo, closeMobileMenu, employee }) => {

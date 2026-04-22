@@ -205,15 +205,15 @@ export default function StoreCategoriesPage() {
     const isGlobal = cat.createdBy === 'ADMIN';
     return (
       <span
-        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${isGlobal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}
+        className={` ${isGlobal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}
       >
         {isGlobal ? (
           <>
-            <Globe size={10} /> Global
+            {/* <Globe size={10} /> Global */}
           </>
         ) : (
           <>
-            <Store size={10} /> Mine
+            {/* <Store size={10} /> Mine */}
           </>
         )}
       </span>
@@ -334,7 +334,7 @@ export default function StoreCategoriesPage() {
                   required
                 />
               </div>
-              {!editingId && (
+              {/* {!editingId && (
                 <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">
                   <Store size={16} className="text-blue-500 flex-shrink-0" />
                   <p>
@@ -342,7 +342,7 @@ export default function StoreCategoriesPage() {
                     and its customers.
                   </p>
                 </div>
-              )}
+              )} */}
             </div>
 
             <div className="md:col-span-3 flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -391,11 +391,11 @@ export default function StoreCategoriesPage() {
             </div>
             Product Categories
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          {/* <p className="text-slate-500 text-sm mt-1">
             <span className="text-purple-600 font-medium">Global</span> = admin categories
             (read-only). <span className="text-blue-600 font-medium">Mine</span> = your store
             categories (editable).
-          </p>
+          </p> */}
         </div>
         <button
           onClick={openAddForm}
@@ -522,7 +522,7 @@ export default function StoreCategoriesPage() {
                   <th className="text-left px-5 py-3.5 font-medium text-slate-500 hidden md:table-cell">
                     Description
                   </th>
-                  <th className="text-left px-5 py-3.5 font-medium text-slate-500">Scope</th>
+                  {/* <th className="text-left px-5 py-3.5 font-medium text-slate-500">Scope</th> */}
                   <th className="text-center px-5 py-3.5 font-medium text-slate-500">Actions</th>
                 </tr>
               </thead>
@@ -543,9 +543,9 @@ export default function StoreCategoriesPage() {
                       <td className="px-5 py-4 text-slate-500 hidden md:table-cell max-w-xs">
                         <p className="line-clamp-2">{cat.description}</p>
                       </td>
-                      <td className="px-5 py-4">
+                      {/* <td className="px-5 py-4">
                         <ScopeBadge cat={cat} />
-                      </td>
+                      </td> */}
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-center gap-2">
                           {owned ? (
@@ -579,7 +579,7 @@ export default function StoreCategoriesPage() {
         )}
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700 flex items-start gap-3">
+      {/* <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700 flex items-start gap-3">
         <Info size={18} className="text-blue-500 mt-0.5 flex-shrink-0" />
         <p>
           <span className="font-medium text-blue-800">Tip: </span>
@@ -587,7 +587,7 @@ export default function StoreCategoriesPage() {
           to all users. Your <span className="text-blue-600 font-medium">store</span> categories are
           visible to your store customers too.
         </p>
-      </div>
+      </div> */}
 
       {/* ── Delete Modal ────────────────────────────────────────── */}
       {deleteModal.open && (

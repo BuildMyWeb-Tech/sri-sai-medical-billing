@@ -30,7 +30,7 @@ import {
 const ALL_PERMISSIONS = [
   { key: 'billing',            label: 'Billing',             Icon: Receipt },
   { key: 'inventory',          label: 'Inventory',                         Icon: Package },
-  { key: 'orders',             label: 'Orders',                   Icon: ClipboardList },
+  // { key: 'orders',             label: 'Orders',                   Icon: ClipboardList },
   { key: 'reports',            label: 'Reports',              Icon: BarChart2 },
   { key: 'product_categories', label: 'Categories',                  Icon: Tag },
   { key: 'manage_product',     label: 'Products',                   Icon: ShoppingBag },

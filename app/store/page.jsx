@@ -286,15 +286,6 @@ export default function Dashboard() {
             color="teal"
             sub="Today"
           />
-        </div>
-      </div>
-
-      {/* ── Order Stats ────────────────────────────────────────── */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <ShoppingCart size={14} /> Orders & Products
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           <StatCard
             title="Total Products"
             value={dash.totalProducts}
@@ -307,14 +298,57 @@ export default function Dashboard() {
             icon={Layers}
             color="indigo"
           />
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="bg-green-100 rounded-xl p-3">
+            <IndianRupee size={20} className="text-green-500" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
+            <p className="text-2xl font-bold text-slate-800">
+              ₹{dash.totalEarnings.toLocaleString('en-IN')}
+            </p>
+            <p className="text-xs text-slate-400">All orders combined</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="bg-blue-100 rounded-xl p-3">
+            <TrendingUp size={20} className="text-blue-500" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide">Delivery Rate</p>
+            <p className="text-2xl font-bold text-slate-800">{conversionRate}%</p>
+            <p className="text-xs text-slate-400">Delivered / Total orders</p>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      {/* ── Order Stats ────────────────────────────────────────── */}
+      <div>
+        {/* <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+          <ShoppingCart size={14} /> Orders & Products
+        </h2> */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {/* <StatCard
+            title="Total Products"
+            value={dash.totalProducts}
+            icon={ShoppingBasket}
+            color="blue"
+          />
           <StatCard
+            title="Total Categories"
+            value={dash.totalCategories}
+            icon={Layers}
+            color="indigo"
+          /> */}
+          {/* <StatCard
             title="Total Orders"
             value={dash.totalOrders}
             icon={ShoppingCart}
             color="purple"
-          />
-          <StatCard title="Total Customers" value={dash.totalCustomers} icon={Users} color="teal" />
-          <StatCard
+          /> */}
+          {/* <StatCard title="Total Customers" value={dash.totalCustomers} icon={Users} color="teal" /> */}
+          {/* <StatCard
             title="Total Revenue"
             value={`₹${dash.revenue.toLocaleString('en-IN')}`}
             icon={IndianRupee}
@@ -330,7 +364,7 @@ export default function Dashboard() {
             value={`${conversionRate}%`}
             icon={TrendingUp}
             color="pink"
-          />
+          /> */}
         </div>
       </div>
 
@@ -547,7 +581,7 @@ export default function Dashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+        {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
           <div className="bg-amber-100 rounded-xl p-3">
             <Star size={20} className="text-amber-500" />
           </div>
@@ -556,8 +590,8 @@ export default function Dashboard() {
             <p className="text-2xl font-bold text-slate-800">{avgRating}</p>
             <p className="text-xs text-slate-400">{dash.ratings.length} reviews</p>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+        </div> */}
+        {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
           <div className="bg-green-100 rounded-xl p-3">
             <IndianRupee size={20} className="text-green-500" />
           </div>
@@ -568,8 +602,8 @@ export default function Dashboard() {
             </p>
             <p className="text-xs text-slate-400">All orders combined</p>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+        </div> */}
+        {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
           <div className="bg-blue-100 rounded-xl p-3">
             <TrendingUp size={20} className="text-blue-500" />
           </div>
@@ -578,11 +612,11 @@ export default function Dashboard() {
             <p className="text-2xl font-bold text-slate-800">{conversionRate}%</p>
             <p className="text-xs text-slate-400">Delivered / Total orders</p>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Recent Reviews */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex justify-between items-center p-5 border-b border-slate-100">
           <h2 className="text-lg font-semibold text-slate-800">Recent Customer Reviews</h2>
           <span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">
@@ -662,7 +696,7 @@ export default function Dashboard() {
             ))
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

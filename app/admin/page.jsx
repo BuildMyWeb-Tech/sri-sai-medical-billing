@@ -120,7 +120,8 @@ export default function AdminDashboard() {
             {/* Area Chart */}
             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
                 <h2 className="font-semibold text-slate-800 text-lg mb-4">Sales Analytics</h2>
-                <OrdersAreaChart allOrders={dashboardData.allOrders} />
+                {/* <OrdersAreaChart allOrders={dashboardData.allOrders} /> */}
+                <OrdersAreaChart dailyData={dashboardData.dailyData} />
             </div>
         </div>
     )

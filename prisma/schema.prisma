@@ -226,27 +226,31 @@ model Store {
 // ── POS Billing Models ────────────────────────────────────────────────────────
 
 model Bill {
-  id          String     @id @default(cuid())
-  billNumber  String
-  storeId     String
-  subtotal    Float
-  discount    Float      @default(0)
-  taxAmount   Float      @default(0)
-  total       Float
-  paymentMode String     @default("CASH")
-  note        String?
-  createdAt   DateTime   @default(now())
-  employeeId  String?    // ← ADD THIS
+  id           String     @id @default(cuid())
+  billNumber   String
+  storeId      String
+  subtotal     Float
+  discount     Float      @default(0)
+  taxAmount    Float      @default(0)
+  total        Float
+  paymentMode  String     @default("CASH")
+  note         String?
+  createdAt    DateTime   @default(now())
+  employeeId   String?
 
-  items       BillItem[]
-  store       Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  employee    Employee?  @relation(fields: [employeeId], references: [id])  // ← ADD THIS
+  // ── Cash-change fields (nullable so old bills are unaffected) ──
+  paidAmount   Float?
+  changeAmount Float?
+
+  items        BillItem[]
+  store        Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  employee     Employee?  @relation(fields: [employeeId], references: [id])
 
   @@index([storeId])
   @@index([createdAt])
   @@index([billNumber])
   @@index([storeId, createdAt])
-  @@index([employeeId])   // ← ADD THIS
+  @@index([employeeId])
 }
 
 model BillItem {

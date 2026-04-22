@@ -1,11 +1,7 @@
-📁 .clerk
-   📁 .tmp
-      📄 keyless.json
-      📄 README.md
-      📄 telemetry.json
 📄 .env
 📄 .env.example
 📄 .gitignore
+📁 .idea
 📁 app
    📁 (public)
       📁 about
@@ -128,8 +124,6 @@
       📁 sales
          📁 sync
             📄 route.js
-      📁 settings
-         📄 route.js
       📁 store
          📁 ai
             📄 route.js
@@ -152,6 +146,8 @@
             📁 variant
                📄 route.js
          📁 products-for-billing
+            📄 route.js
+         📁 settings
             📄 route.js
          📁 stock-toggle
             📄 route.js
@@ -250,6 +246,7 @@
       📄 StoreLayout.jsx
       📄 StoreNavbar.jsx
       📄 StoreSidebar.jsx
+      📄 SyncStatusBadge.jsx
    📄 Title.jsx
 📁 configs
    📄 imageKit.js
@@ -272,6 +269,11 @@
          📄 ratingSlice.js
       📁 wishlist
          📄 wishlistSlice.js
+   📁 pos
+      📄 posDB.js
+      📄 productCache.js
+      📄 syncEngine.js
+      📄 usePOS.js
    📄 prisma.js
    📄 reportUtils.js
    📄 store.js
@@ -300,5 +302,10 @@
          📄 migration.sql
       📁 20260408171746_add_product_variants
          📄 migration.sql
+      📁 20260419054434_add_employee_id_to_bill_and_sale
+         📄 migration.sql
       📄 migration_lock.toml
    📄 schema.prisma
+📄 README.md
+📄 show-structure.js
+📄 show-structure.txt

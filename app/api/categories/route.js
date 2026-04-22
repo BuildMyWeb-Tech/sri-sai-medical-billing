@@ -91,6 +91,7 @@ export async function GET(request) {
 }
 
 // ── POST: Create category ─────────────────────────────────────────
+// FIX #1: Only "name" is required; description and image are optional
 // Admin  → global (storeId = null, createdBy = ADMIN)
 // Store  → scoped (storeId = store's id, createdBy = STORE)
 export async function POST(request) {
@@ -102,13 +103,14 @@ export async function POST(request) {
     }
 
     const formData = await request.formData();
-    const name = formData.get('name');
-    const description = formData.get('description');
+    const name = formData.get('name')?.trim();
+    const description = formData.get('description')?.trim() || '';
     const imageFile = formData.get('image');
 
-    if (!name || !description || !imageFile) {
+    // ── FIX #1: Only name is required ────────────────────────────
+    if (!name) {
       return NextResponse.json(
-        { error: 'Name, description and image are required' },
+        { error: 'Category name is required' },
         { status: 400 }
       );
     }
@@ -125,16 +127,20 @@ export async function POST(request) {
       );
     }
 
-    const buffer = Buffer.from(await imageFile.arrayBuffer());
-    const uploadResponse = await imagekit.upload({
-      file: buffer,
-      fileName: imageFile.name,
-      folder: 'categories',
-    });
-    const imageUrl = imagekit.url({
-      path: uploadResponse.filePath,
-      transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '512' }],
-    });
+    // ── Upload image only if provided ─────────────────────────────
+    let imageUrl = '';
+    if (imageFile && imageFile.size > 0) {
+      const buffer = Buffer.from(await imageFile.arrayBuffer());
+      const uploadResponse = await imagekit.upload({
+        file: buffer,
+        fileName: imageFile.name,
+        folder: 'categories',
+      });
+      imageUrl = imagekit.url({
+        path: uploadResponse.filePath,
+        transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '512' }],
+      });
+    }
 
     const category = await prisma.category.create({
       data: {
@@ -155,6 +161,7 @@ export async function POST(request) {
 }
 
 // ── PUT: Edit category ────────────────────────────────────────────
+// FIX #1: Only name is required for edit too
 // Admin  → can edit any category
 // Store  → can only edit their own categories
 export async function PUT(request) {
@@ -167,12 +174,13 @@ export async function PUT(request) {
 
     const formData = await request.formData();
     const id = formData.get('id');
-    const name = formData.get('name');
-    const description = formData.get('description');
+    const name = formData.get('name')?.trim();
+    const description = formData.get('description')?.trim() || '';
     const imageFile = formData.get('image');
 
-    if (!id || !name || !description) {
-      return NextResponse.json({ error: 'ID, name and description are required' }, { status: 400 });
+    // ── FIX #1: Only id and name required ────────────────────────
+    if (!id || !name) {
+      return NextResponse.json({ error: 'ID and name are required' }, { status: 400 });
     }
 
     const existing = await prisma.category.findUnique({ where: { id } });

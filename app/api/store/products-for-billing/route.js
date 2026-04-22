@@ -4,6 +4,7 @@
 //    - Store owner (Clerk session via getAuth)
 //    - Employee (JWT token via Authorization header)
 //
+// FIX #9: Search now matches product name, SKU, AND variant barcode
 // Returns products WITH variants (including barcode for scan)
 // Used by: Store Billing, Employee Billing
 
@@ -45,6 +46,7 @@ export async function GET(request) {
     const search = searchParams.get('search');
     const limit = Math.min(500, parseInt(searchParams.get('limit') || '200'));
 
+    // ── FIX #9: Build where clause — search name, SKU, AND variant barcode ──
     let where = { storeId };
 
     if (search) {
@@ -54,6 +56,8 @@ export async function GET(request) {
         OR: [
           { name: { contains: q, mode: 'insensitive' } },
           { sku: { contains: q, mode: 'insensitive' } },
+          // ── FIX #9: match variant barcode ────────────────────────
+          { variants: { some: { barcode: { contains: q, mode: 'insensitive' } } } },
         ],
       };
     }

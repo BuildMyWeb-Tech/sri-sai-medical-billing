@@ -535,6 +535,7 @@ export default function EmployeeBillingPage() {
   const [billDiscount, setBillDiscount]         = useState(0);
   const [paymentMode, setPaymentMode]           = useState('CASH');
   const [note, setNote]                         = useState('');
+  const [paidAmount, setPaidAmount] = useState('');
   const [loading, setLoading]                   = useState(false);
   const [successBill, setSuccessBill]           = useState(null);
   const [queueCount, setQueueCount]             = useState(0);
@@ -573,12 +574,15 @@ export default function EmployeeBillingPage() {
   const feedbackTimer = useRef(null);
 
   // ── Memoized totals ───────────────────────────────────────────────────────
-  const { subtotal, discounted, taxResult, grandTotal } = useMemo(() => {
-    const sub  = cartItems.reduce((s, i) => s + i.price * i.quantity - (i.itemDiscount || 0), 0);
-    const disc = Math.max(0, sub - Number(billDiscount || 0));
-    const tax  = calculateTax(disc, settings);
-    return { subtotal: sub, discounted: disc, taxResult: tax, grandTotal: tax.total };
-  }, [cartItems, billDiscount, settings]);
+  const { subtotal, discounted, taxResult, grandTotal, changeAmount } = useMemo(() => {
+  const sub  = cartItems.reduce((s, i) => s + i.price * i.quantity - (i.itemDiscount || 0), 0);
+  const disc = Math.max(0, sub - Number(billDiscount || 0));
+  const tax  = calculateTax(disc, settings);
+  const total = tax.total;
+  const paid  = paymentMode === 'CASH' ? parseFloat(paidAmount || 0) : 0;
+  const change = paid > total ? parseFloat((paid - total).toFixed(2)) : 0;
+  return { subtotal: sub, discounted: disc, taxResult: tax, grandTotal: total, changeAmount: change };
+}, [cartItems, billDiscount, settings, paymentMode, paidAmount]);
 
   const fmt = useCallback((n) => formatCurrency(n, settings), [settings]);
 
@@ -756,12 +760,17 @@ export default function EmployeeBillingPage() {
   }, []);
 
   const removeItem = useCallback((idx) => { setCartItems((prev) => prev.filter((_, i) => i !== idx)); }, []);
-  const clearCart  = useCallback(() => { setCartItems([]); setBillDiscount(0); setNote(''); setPaymentMode('CASH'); }, []);
-
+const clearCart = useCallback(() => {
+  setCartItems([]); setBillDiscount(0); setNote(''); setPaymentMode('CASH'); setPaidAmount('');
+}, []);
   // ── Complete bill ─────────────────────────────────────────────────────────
   const completeBill = async () => {
     if (!cartItems.length) return;
     setLoading(true);
+    // Inside completeBill, after grandTotal is available via useMemo:
+const isCash    = paymentMode === 'CASH';
+const paidAmt   = isCash ? parseFloat(paidAmount || grandTotal) : null;
+const changeAmt = isCash && paidAmt != null ? Math.max(0, parseFloat((paidAmt - grandTotal).toFixed(2))) : null;
     const localId    = `ebill_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const billNumber = generateBillNumber();
     const now        = Date.now();
@@ -772,6 +781,8 @@ export default function EmployeeBillingPage() {
       taxAmount:   parseFloat(taxResult.taxAmount.toFixed(2)),
       total:       parseFloat(grandTotal.toFixed(2)),
       paymentMode, note: note || null, createdAt: now, synced: false,
+      paidAmount:   paidAmt,
+changeAmount: changeAmt,
       items: cartItems.map((it) => ({
         productId: it.productId, variantId: it.variantId, name: it.name, size: it.size,
         price: it.price, quantity: it.quantity, discount: it.itemDiscount || 0,
@@ -999,13 +1010,52 @@ export default function EmployeeBillingPage() {
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Payment Mode</h3>
                 <div className="grid grid-cols-4 gap-2">
                   {PAYMENT_MODES.map((pm) => (
-                    <button key={pm.id} onClick={() => setPaymentMode(pm.id)}
+                      <button key={pm.id} onClick={() => { setPaymentMode(pm.id); setPaidAmount(''); }}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all text-xs font-medium ${paymentMode === pm.id ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'}`}>
                       <pm.icon size={18} /> {pm.label}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {/* CASH CHANGE SECTION */}
+{paymentMode === 'CASH' && (
+  <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-2.5">
+    <h3 className="text-xs font-semibold text-green-700 uppercase tracking-wider flex items-center gap-1.5">
+      <Banknote size={13} /> Cash Payment
+    </h3>
+
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-slate-700 font-medium">Customer Paid</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-slate-500 text-sm font-medium">₹</span>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={paidAmount}
+          onChange={(e) => setPaidAmount(e.target.value)}
+          placeholder={grandTotal > 0 ? grandTotal.toFixed(2) : '0.00'}
+          className="w-28 text-right text-sm font-semibold border-2 border-green-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+        />
+      </div>
+    </div>
+
+    {parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
+      <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2.5 border border-green-300">
+        <span className="text-sm font-semibold text-green-700">Change to Return</span>
+        <span className="text-base font-bold text-green-700">{fmt(changeAmount)}</span>
+      </div>
+    )}
+
+    {parseFloat(paidAmount) > 0 && parseFloat(paidAmount) < grandTotal && (
+      <div className="flex items-center justify-between bg-red-50 rounded-xl px-4 py-2.5 border border-red-200">
+        <span className="text-sm text-red-600 font-medium">Still Owed</span>
+        <span className="text-sm font-bold text-red-600">{fmt(grandTotal - parseFloat(paidAmount))}</span>
+      </div>
+    )}
+  </div>
+)}
 
               {/* <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Note</h3>
@@ -1024,6 +1074,12 @@ export default function EmployeeBillingPage() {
                 className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
                 {loading ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</> : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>}
               </button>
+              {paymentMode === 'CASH' && parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
+                <div className="flex items-center justify-between mt-2 px-1">
+                  <span className="text-xs text-slate-500">Paid {fmt(parseFloat(paidAmount))}</span>
+                  <span className="text-xs font-semibold text-green-600">Change {fmt(changeAmount)}</span>
+                </div>
+              )}
               {/* <p className="text-center text-xs text-slate-400 mt-2">
                 {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
               </p> */}
@@ -1183,6 +1239,9 @@ export default function EmployeeBillingPage() {
           <CheckCircle size={18} />
           <div className="flex flex-col">
             <span>Bill {successBill.billNumber} saved!</span>
+            {successBill?.paymentMode === 'CASH' && successBill?.changeAmount > 0 && (
+  <span className="text-[11px] text-green-200 mt-0.5">Change: {fmt(successBill.changeAmount)}</span>
+)}
             {lastPrintMethod && <span className="text-[10px] text-green-200 mt-0.5">{lastPrintMethod === 'qz' ? '🖨 Printed via QZ Tray' : '🌐 Opened browser print'}</span>}
           </div>
           <button onClick={() => printBillAuto(successBill, settings, printerName)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg text-xs"><Printer size={12} /> Reprint</button>

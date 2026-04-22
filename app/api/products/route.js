@@ -20,6 +20,15 @@ async function resolveRole(request) {
   return { userId, role: null, storeId: null };
 }
 
+// ── FIX #3: Dynamic validation — returns exact missing field names ─
+function validateProductFields(fields) {
+  const missing = [];
+  if (!fields.name) missing.push('Name');
+  if (!fields.price || Number(fields.price) <= 0) missing.push('Price');
+  // mrp, description, images, category are all OPTIONAL per FIX #2 / #7
+  return missing;
+}
+
 // ── GET: Merged product listing ───────────────────────────────────
 // Public/User → all inStock products
 // Admin       → ALL products
@@ -54,8 +63,9 @@ export async function GET(request) {
       const searchCondition = {
         OR: [
           { name: { contains: q, mode: 'insensitive' } },
-          { barcode: { contains: q, mode: 'insensitive' } },
           { sku: { contains: q, mode: 'insensitive' } },
+          // ── FIX #9: also search variant barcodes ─────────────────
+          { variants: { some: { barcode: { contains: q, mode: 'insensitive' } } } },
         ],
       };
       if (where.OR) {
@@ -79,10 +89,12 @@ export async function GET(request) {
         quantity: true,
         inStock: true,
         storeId: true,
-        barcode: true,
         sku: true,
         createdBy: true,
         createdAt: true,
+        variants: {
+          select: { id: true, size: true, price: true, stock: true, barcode: true },
+        },
         rating: {
           select: { id: true, rating: true, review: true, userId: true, createdAt: true },
         },
@@ -105,6 +117,10 @@ export async function GET(request) {
 }
 
 // ── POST: Admin creates a global product ─────────────────────────
+// FIX #2: category is now optional (allow empty [])
+// FIX #3: dynamic validation message shows exact missing fields
+// FIX #4: auto-create Inventory row inside transaction
+// FIX #7: images, description, mrp, keyFeatures all optional
 export async function POST(request) {
   try {
     const { role } = await resolveRole(request);
@@ -117,25 +133,33 @@ export async function POST(request) {
     }
 
     const formData = await request.formData();
-    const name = formData.get('name');
-    const description = formData.get('description');
-    const mrp = Number(formData.get('mrp'));
+    const name = formData.get('name')?.trim();
+    const description = formData.get('description')?.trim() || '';
+    const mrp = formData.get('mrp') ? Number(formData.get('mrp')) : 0;
     const price = Number(formData.get('price'));
     const quantity = Number(formData.get('quantity')) || 0;
     const categoryRaw = formData.get('category');
     const keyFeaturesRaw = formData.get('keyFeatures');
-    const images = formData.getAll('images');
+    const images = formData.getAll('images').filter((f) => f && f.size > 0);
 
-    if (!name || !description || !mrp || !price || !categoryRaw || images.length < 1) {
-      return NextResponse.json({ error: 'Missing product details' }, { status: 400 });
+    // ── FIX #3: Dynamic validation — show exact missing fields ────
+    const missing = validateProductFields({ name, price });
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Missing fields: ${missing.join(', ')}` },
+        { status: 400 }
+      );
     }
 
+    // ── FIX #2: category is optional — allow empty array ──────────
     let category = [];
-    try {
-      category = JSON.parse(categoryRaw);
-      if (!Array.isArray(category) || category.length === 0) throw new Error();
-    } catch {
-      return NextResponse.json({ error: 'Invalid category format' }, { status: 400 });
+    if (categoryRaw) {
+      try {
+        const parsed = JSON.parse(categoryRaw);
+        if (Array.isArray(parsed)) category = parsed;
+      } catch {
+        category = [];
+      }
     }
 
     let keyFeatures = [];
@@ -149,20 +173,24 @@ export async function POST(request) {
     }
     keyFeatures = keyFeatures.filter((f) => typeof f === 'string' && f.trim() !== '');
 
-    const imagesUrl = await Promise.all(
-      images.map(async (image) => {
-        const buffer = Buffer.from(await image.arrayBuffer());
-        const response = await imagekit.upload({
-          file: buffer,
-          fileName: image.name,
-          folder: 'products',
-        });
-        return imagekit.url({
-          path: response.filePath,
-          transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '1024' }],
-        });
-      })
-    );
+    // ── FIX #7: images optional — upload only if provided ─────────
+    let imagesUrl = [];
+    if (images.length > 0) {
+      imagesUrl = await Promise.all(
+        images.map(async (image) => {
+          const buffer = Buffer.from(await image.arrayBuffer());
+          const response = await imagekit.upload({
+            file: buffer,
+            fileName: image.name,
+            folder: 'products',
+          });
+          return imagekit.url({
+            path: response.filePath,
+            transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '1024' }],
+          });
+        })
+      );
+    }
 
     const product = await prisma.product.create({
       data: {
@@ -188,6 +216,10 @@ export async function POST(request) {
 }
 
 // ── PUT: Update any product ───────────────────────────────────────
+// FIX #2: category optional
+// FIX #3: dynamic validation
+// FIX #4: inventory upsert inside transaction (already existed, kept)
+// FIX #7: optional fields
 export async function PUT(request) {
   try {
     const { role, storeId } = await resolveRole(request);
@@ -207,16 +239,17 @@ export async function PUT(request) {
     const body = await request.json();
     const { name, description, mrp, price, quantity, category, existingImages, keyFeatures } = body;
 
-    if (
-      !name ||
-      !description ||
-      !mrp ||
-      !price ||
-      !Array.isArray(category) ||
-      category.length === 0
-    ) {
-      return NextResponse.json({ error: 'Missing product details' }, { status: 400 });
+    // ── FIX #3: Dynamic validation ────────────────────────────────
+    const missing = validateProductFields({ name, price });
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Missing fields: ${missing.join(', ')}` },
+        { status: 400 }
+      );
     }
+
+    // ── FIX #2: category is optional — allow empty array ──────────
+    const cleanCategory = Array.isArray(category) ? category : [];
 
     const images =
       Array.isArray(existingImages) && existingImages.length > 0 ? existingImages : existing.images;
@@ -232,11 +265,11 @@ export async function PUT(request) {
         where: { id: productId },
         data: {
           name,
-          description,
-          mrp: Number(mrp),
+          description: description || '',
+          mrp: Number(mrp) || 0,
           price: Number(price),
           quantity: newQty,
-          category,
+          category: cleanCategory,
           keyFeatures: cleanKeyFeatures,
           images,
           inStock: newQty > 0,

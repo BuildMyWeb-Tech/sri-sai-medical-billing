@@ -1,6 +1,7 @@
 // app/store/analytics/page.jsx
+// FIX #5: Export dropdown now closes on outside click using useRef + useEffect
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -99,12 +100,8 @@ function KpiCard({ title, value, sub, icon: Icon, color, growth, loading }) {
   return (
     <div className={`rounded-xl border ${c.border} ${c.bg} p-5 flex flex-col gap-3 shadow-sm`}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-          {title}
-        </span>
-        <div className={`p-2 rounded-lg ${c.icon}`}>
-          <Icon size={18} />
-        </div>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{title}</span>
+        <div className={`p-2 rounded-lg ${c.icon}`}><Icon size={18} /></div>
       </div>
       {loading ? (
         <div className="h-8 w-24 bg-slate-200 animate-pulse rounded" />
@@ -113,16 +110,8 @@ function KpiCard({ title, value, sub, icon: Icon, color, growth, loading }) {
       )}
       {sub && <p className="text-xs text-slate-400">{sub}</p>}
       {growth !== undefined && !loading && (
-        <div
-          className={`flex items-center gap-1 text-xs font-medium ${growth > 0 ? 'text-green-600' : growth < 0 ? 'text-red-500' : 'text-slate-400'}`}
-        >
-          {growth > 0 ? (
-            <ArrowUpRight size={13} />
-          ) : growth < 0 ? (
-            <ArrowDownRight size={13} />
-          ) : (
-            <Minus size={13} />
-          )}
+        <div className={`flex items-center gap-1 text-xs font-medium ${growth > 0 ? 'text-green-600' : growth < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+          {growth > 0 ? <ArrowUpRight size={13} /> : growth < 0 ? <ArrowDownRight size={13} /> : <Minus size={13} />}
           {Math.abs(growth)}% vs previous period
         </div>
       )}
@@ -138,29 +127,18 @@ function ComparisonBanner({ data }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {[
-        {
-          label: 'Revenue',
-          d: revenue,
-          Icon: RevIcon,
-          fmt: (v) => `₹${v.toLocaleString('en-IN')}`,
-        },
+        { label: 'Revenue', d: revenue, Icon: RevIcon, fmt: (v) => `₹${v.toLocaleString('en-IN')}` },
         { label: 'Orders', d: orders, Icon: OrdIcon, fmt: (v) => v },
       ].map(({ label, d, Icon, fmt }) => (
         <div key={label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <p className="text-xs text-slate-500 font-medium mb-3">
-            {label}: {labels[0]} vs {labels[1]}
-          </p>
+          <p className="text-xs text-slate-500 font-medium mb-3">{label}: {labels[0]} vs {labels[1]}</p>
           <div className="flex items-end justify-between">
             <div>
               <p className="text-xs text-slate-400">{labels[0]}</p>
               <p className="text-xl font-bold text-slate-800">{fmt(d.current)}</p>
             </div>
-            <div
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${d.growth > 0 ? 'bg-green-100 text-green-700' : d.growth < 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}
-            >
-              <Icon size={12} />
-              {d.growth > 0 ? '+' : ''}
-              {d.growth}%
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${d.growth > 0 ? 'bg-green-100 text-green-700' : d.growth < 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+              <Icon size={12} /> {d.growth > 0 ? '+' : ''}{d.growth}%
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-400">{labels[1]}</p>
@@ -180,9 +158,7 @@ const ChartTooltip = ({ active, payload, label }) => {
       <p className="font-semibold text-slate-700 mb-1">{label}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.color }}>
-          {p.name === 'revenue'
-            ? `Revenue: ₹${p.value.toLocaleString('en-IN')}`
-            : `Orders: ${p.value}`}
+          {p.name === 'revenue' ? `Revenue: ₹${p.value.toLocaleString('en-IN')}` : `Orders: ${p.value}`}
         </p>
       ))}
     </div>
@@ -207,6 +183,21 @@ export default function StoreSalesReport() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // ── FIX #5: Ref for outside-click detection ───────────────────
+  const exportMenuRef = useRef(null);
+
+  // ── FIX #5: Close dropdown when clicking outside ──────────────
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleOutsideClick = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showExportMenu]);
 
   const buildQS = useCallback(
     (extra = {}) => {
@@ -248,9 +239,7 @@ export default function StoreSalesReport() {
     }
   }, [getToken, buildQS]);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleExport = async (format) => {
     try {
@@ -300,10 +289,7 @@ export default function StoreSalesReport() {
         <div class="kpi"><div class="kpi-label">AOV</div><div class="kpi-value">₹${s.aov.toLocaleString('en-IN')}</div></div>
       </div>
       <table><thead><tr>${columns.map((c) => `<th>${c.label}</th>`).join('')}</tr></thead>
-      <tbody>${rows
-        .slice(0, 500)
-        .map((r) => `<tr>${columns.map((c) => `<td>${r[c.key] ?? ''}</td>`).join('')}</tr>`)
-        .join('')}</tbody>
+      <tbody>${rows.slice(0, 500).map((r) => `<tr>${columns.map((c) => `<td>${r[c.key] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
       </table></body></html>`);
     win.document.close();
   };
@@ -316,20 +302,17 @@ export default function StoreSalesReport() {
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <BarChart2 size={24} className="text-green-600" /> Sales Report
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Track your store revenue and order performance
-          </p>
+          <p className="text-sm text-slate-500 mt-1">Track your store revenue and order performance</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={fetchAll}
-            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg text-slate-700 text-sm"
-          >
+          <button onClick={fetchAll} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg text-slate-700 text-sm">
             <RefreshCcw size={14} /> Refresh
           </button>
-          <div className="relative">
+
+          {/* ── FIX #5: Export dropdown with outside-click ref ── */}
+          <div className="relative" ref={exportMenuRef}>
             <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
+              onClick={() => setShowExportMenu((prev) => !prev)}
               disabled={exporting}
               className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60"
             >
@@ -366,12 +349,7 @@ export default function StoreSalesReport() {
                 <button
                   key={p.value}
                   onClick={() => setPeriod(p.value)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all
-                    ${
-                      period === p.value
-                        ? 'bg-green-600 text-white border-green-600'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-green-300'
-                    }`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${period === p.value ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300'}`}
                 >
                   {p.label}
                 </button>
@@ -383,28 +361,13 @@ export default function StoreSalesReport() {
             <div className="flex items-center gap-2">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-500">From</label>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-100"
-                />
+                <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-100" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-500">To</label>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-100"
-                />
+                <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-100" />
               </div>
-              <button
-                onClick={fetchAll}
-                className="mt-4 bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700"
-              >
-                Apply
-              </button>
+              <button onClick={fetchAll} className="mt-4 bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700">Apply</button>
             </div>
           )}
 
@@ -416,9 +379,7 @@ export default function StoreSalesReport() {
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-100 bg-white"
             >
               {COMPARISONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
+                <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
           </div>
@@ -427,39 +388,12 @@ export default function StoreSalesReport() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title="Total Revenue"
-          value={`₹${(summary?.revenue || 0).toLocaleString('en-IN')}`}
-          sub={`${summary?.orders || 0} transactions`}
-          icon={IndianRupee}
-          color="green"
-          growth={summary?.comparison?.revenue?.growth}
-          loading={loadingSummary}
-        />
-        <KpiCard
-          title="Total Orders"
-          value={summary?.orders || 0}
-          sub="in selected period"
-          icon={ShoppingCart}
-          color="blue"
-          growth={summary?.comparison?.orders?.growth}
-          loading={loadingSummary}
-        />
-        <KpiCard
-          title="Avg Order Value"
-          value={`₹${(summary?.aov || 0).toLocaleString('en-IN')}`}
-          sub="per transaction"
-          icon={TrendingUp}
-          color="purple"
-          loading={loadingSummary}
-        />
+        <KpiCard title="Total Revenue" value={`₹${(summary?.revenue || 0).toLocaleString('en-IN')}`} sub={`${summary?.orders || 0} transactions`} icon={IndianRupee} color="green" growth={summary?.comparison?.revenue?.growth} loading={loadingSummary} />
+        <KpiCard title="Total Orders" value={summary?.orders || 0} sub="in selected period" icon={ShoppingCart} color="blue" growth={summary?.comparison?.orders?.growth} loading={loadingSummary} />
+        <KpiCard title="Avg Order Value" value={`₹${(summary?.aov || 0).toLocaleString('en-IN')}`} sub="per transaction" icon={TrendingUp} color="purple" loading={loadingSummary} />
         <KpiCard
           title="Top Product"
-          value={
-            products[0]?.name
-              ? products[0].name.slice(0, 18) + (products[0].name.length > 18 ? '…' : '')
-              : '—'
-          }
+          value={products[0]?.name ? products[0].name.slice(0, 18) + (products[0].name.length > 18 ? '…' : '') : '—'}
           sub={products[0] ? `₹${products[0].revenue.toLocaleString('en-IN')} revenue` : 'No data'}
           icon={Package}
           color="amber"
@@ -496,12 +430,8 @@ export default function StoreSalesReport() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-slate-600 text-xs">{emp.bills}</td>
-                    <td className="px-5 py-3.5 text-green-700 font-semibold text-xs">
-                      ₹{emp.revenue.toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell text-xs">
-                      ₹{emp.bills > 0 ? Math.round(emp.revenue / emp.bills).toLocaleString('en-IN') : 0}
-                    </td>
+                    <td className="px-5 py-3.5 text-green-700 font-semibold text-xs">₹{emp.revenue.toLocaleString('en-IN')}</td>
+                    <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell text-xs">₹{emp.bills > 0 ? Math.round(emp.revenue / emp.bills).toLocaleString('en-IN') : 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -516,11 +446,7 @@ export default function StoreSalesReport() {
           <h2 className="font-semibold text-slate-800 text-base">Sales Trend</h2>
           <div className="flex gap-1.5">
             {CHART_TABS.map((t) => (
-              <button
-                key={t.value}
-                onClick={() => setChartTab(t.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${chartTab === t.value ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
+              <button key={t.value} onClick={() => setChartTab(t.value)} className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${chartTab === t.value ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 {t.label}
               </button>
             ))}
@@ -531,28 +457,15 @@ export default function StoreSalesReport() {
             <Loader2 size={18} className="animate-spin" /> Loading chart...
           </div>
         ) : trend.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
-            No sales data for this period
-          </div>
+          <div className="h-64 flex items-center justify-center text-slate-400 text-sm">No sales data for this period</div>
         ) : chartTab === 'line' ? (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={trend} margin={{ left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`}
-              />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} />
               <Tooltip content={<ChartTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="revenue"
-                name="revenue"
-                stroke="#22c55e"
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
+              <Line type="monotone" dataKey="revenue" name="revenue" stroke="#22c55e" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : (
@@ -560,10 +473,7 @@ export default function StoreSalesReport() {
             <BarChart data={trend} margin={{ left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`}
-              />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} />
               <Tooltip content={<ChartTooltip />} />
               <Bar dataKey="revenue" name="revenue" fill="#22c55e" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -576,29 +486,15 @@ export default function StoreSalesReport() {
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm p-5">
           <h2 className="font-semibold text-slate-800 text-base mb-4">Revenue by Product</h2>
           {loadingProducts ? (
-            <div className="h-48 flex items-center justify-center text-slate-400 gap-2">
-              <Loader2 size={16} className="animate-spin" />
-            </div>
+            <div className="h-48 flex items-center justify-center text-slate-400 gap-2"><Loader2 size={16} className="animate-spin" /></div>
           ) : products.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
-              No data
-            </div>
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">No data</div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie
-                    data={products.slice(0, 8)}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="revenue"
-                  >
-                    {products.slice(0, 8).map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
+                  <Pie data={products.slice(0, 8)} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="revenue">
+                    {products.slice(0, 8).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => [`₹${v.toLocaleString('en-IN')}`, 'Revenue']} />
                 </PieChart>
@@ -607,10 +503,7 @@ export default function StoreSalesReport() {
                 {products.slice(0, 8).map((p, i) => (
                   <div key={p.productId} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-                      />
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                       <span className="text-slate-600 truncate max-w-[130px]">{p.name}</span>
                     </div>
                     <span className="font-semibold text-slate-700 ml-2">{p.share}%</span>
@@ -626,31 +519,19 @@ export default function StoreSalesReport() {
             <h2 className="font-semibold text-slate-800 text-base">Top Products</h2>
           </div>
           {loadingProducts ? (
-            <div className="flex items-center justify-center py-12 text-slate-400 gap-2">
-              <Loader2 size={16} className="animate-spin" />
-            </div>
+            <div className="flex items-center justify-center py-12 text-slate-400 gap-2"><Loader2 size={16} className="animate-spin" /></div>
           ) : products.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
-              No products sold in this period
-            </div>
+            <div className="flex items-center justify-center py-12 text-slate-400 text-sm">No products sold in this period</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs">#</th>
-                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs">
-                      Product
-                    </th>
-                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs">
-                      Revenue
-                    </th>
-                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs hidden sm:table-cell">
-                      Qty
-                    </th>
-                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs hidden sm:table-cell">
-                      Share
-                    </th>
+                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs">Product</th>
+                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs">Revenue</th>
+                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs hidden sm:table-cell">Qty</th>
+                    <th className="text-left px-5 py-3 font-medium text-slate-500 text-xs hidden sm:table-cell">Share</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -664,24 +545,15 @@ export default function StoreSalesReport() {
                               <Image src={p.image} alt={p.name} fill className="object-cover" />
                             </div>
                           )}
-                          <span className="text-slate-800 font-medium line-clamp-1 max-w-[140px] text-xs">
-                            {p.name}
-                          </span>
+                          <span className="text-slate-800 font-medium line-clamp-1 max-w-[140px] text-xs">{p.name}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-green-700 font-semibold text-xs">
-                        ₹{p.revenue.toLocaleString('en-IN')}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell text-xs">
-                        {p.quantity}
-                      </td>
+                      <td className="px-5 py-3.5 text-green-700 font-semibold text-xs">₹{p.revenue.toLocaleString('en-IN')}</td>
+                      <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell text-xs">{p.quantity}</td>
                       <td className="px-5 py-3.5 hidden sm:table-cell">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 bg-slate-100 rounded-full h-1.5 max-w-[60px]">
-                            <div
-                              className="bg-green-500 h-1.5 rounded-full"
-                              style={{ width: `${Math.min(p.share, 100)}%` }}
-                            />
+                            <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${Math.min(p.share, 100)}%` }} />
                           </div>
                           <span className="text-xs text-slate-500">{p.share}%</span>
                         </div>

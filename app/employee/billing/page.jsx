@@ -2,37 +2,40 @@
 /**
  * /app/employee/billing/page.jsx
  *
- * PERFORMANCE OPTIMIZATIONS:
- * ✅ CartItem is React.memo — only changed row re-renders
- * ✅ Barcode lookup uses productCache Map (O(1), no loop)
- * ✅ Search uses pre-indexed nameIndex (no toLowerCase per item)
- * ✅ All cart handlers are useCallback — stable references
- * ✅ Totals use useMemo — no recalc on unrelated renders
- * ✅ Cart state is local (NOT Redux) — instant updates
- * ✅ FIXED: duplicate return() in useEffect removed
- * ✅ All existing features preserved (QZ, offline, IndexedDB, history)
+ * PERFORMANCE OPTIMIZATIONS vs previous version:
+ * ─────────────────────────────────────────────────────────────
+ * ✅ CartRow wrapped in React.memo — only the changed row re-renders
+ * ✅ handleSearch uses local-only search (no API call during billing)
+ *    — instant results from in-memory Map index (productCache.js)
+ * ✅ Removed duplicate useEffect cleanup return (was dead code / React warning)
+ * ✅ handleBarcodeScanned uses findVariantByBarcode O(1) Map lookup
+ * ✅ updateQuantity / updateItemDiscount / removeItem are stable useCallback
+ * ✅ useMemo for subtotal/grandTotal
+ * ✅ Barcode input focus improved — no focus steal from modals
+ * ✅ Background sync never blocks billing UI
+ * ─────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, Printer,
   CheckCircle, Wifi, WifiOff, RefreshCw, X, Tag, Receipt,
-  AlertCircle, CreditCard, Banknote, Smartphone,
-  Maximize, Minimize, ShieldAlert, History, TrendingUp,
-  Filter, ChevronDown, Eye, AlertTriangle, ScanLine,
-  Settings, Plug, PlugZap, CheckSquare, Square, Layers,
+  AlertCircle, CreditCard, Banknote, Smartphone, Maximize,
+  Minimize, ShieldAlert, History, TrendingUp, Filter,
+  ChevronDown, Eye, AlertTriangle, ScanLine, Settings,
+  Plug, PlugZap, CheckSquare, Square, Layers,
 } from 'lucide-react';
 import { calculateTax, formatCurrency } from '@/lib/storeSettings';
-// ── Use the shared productCache for O(1) barcode + fast search ──
 import {
-  initProductCache,
-  searchProducts,
-  findVariantByBarcode,
-  createRefreshScheduler,
+  searchProducts as localSearch,
+  findVariantByBarcode as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
-const LS_PRINTER_NAME = 'emp_pos_printer_name';
+const LS_PRODUCTS      = 'emp_pos_products_cache';
+const LS_PRODUCTS_TS   = 'emp_pos_products_cache_ts';
+const LS_PRINTER_NAME  = 'emp_pos_printer_name';
+const PRODUCT_CACHE_TTL = 10 * 60 * 1000;
 
 // ─── IndexedDB ────────────────────────────────────────────────────────────────
 const DB_NAME    = 'emp_pos_billing_db';
@@ -93,24 +96,39 @@ async function idbCount(storeName) {
   });
 }
 
-// ─── Employee auth token — defined ONCE ──────────────────────────────────────
-function getEmpToken() {
-  try { return localStorage.getItem('empToken') || localStorage.getItem('employeeToken') || ''; }
-  catch { return ''; }
+// ─── Product cache (localStorage fallback) ───────────────────────────────────
+function saveProductsToCache(products) {
+  try {
+    localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
+    localStorage.setItem(LS_PRODUCTS_TS, String(Date.now()));
+  } catch (_) {}
+}
+function getProductsFromCache() {
+  try {
+    const ts = Number(localStorage.getItem(LS_PRODUCTS_TS) || 0);
+    if (Date.now() - ts > PRODUCT_CACHE_TTL) return null;
+    const raw = localStorage.getItem(LS_PRODUCTS);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 
-// ─── Bill number ──────────────────────────────────────────────────────────────
+// Employee auth token — defined ONCE
+function getEmpToken() {
+  try {
+    return localStorage.getItem('empToken') || localStorage.getItem('employeeToken') || '';
+  } catch { return ''; }
+}
+
 function generateBillNumber() {
   const now = new Date();
   return `EBILL-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${String(now.getTime()).slice(-5)}`;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const PAYMENT_MODES = [
-  { id: 'CASH',  label: 'Cash',  icon: Banknote  },
-  { id: 'CARD',  label: 'Card',  icon: CreditCard },
-  { id: 'UPI',   label: 'UPI',   icon: Smartphone },
-  { id: 'OTHER', label: 'Other', icon: Receipt    },
+  { id: 'CASH',  label: 'Cash',  icon: Banknote   },
+  { id: 'CARD',  label: 'Card',  icon: CreditCard  },
+  { id: 'UPI',   label: 'UPI',   icon: Smartphone  },
+  { id: 'OTHER', label: 'Other', icon: Receipt      },
 ];
 const PM_COLORS = {
   CASH:  'bg-green-100 text-green-700',
@@ -124,37 +142,32 @@ const PM_COLORS = {
 // ─────────────────────────────────────────────────────────────────────────────
 const ESC = '\x1B', GS = '\x1D';
 const ESCPOS = {
-  INIT: ESC + '@', ALIGN_LEFT: ESC + 'a\x00', ALIGN_CENTER: ESC + 'a\x01',
-  BOLD_ON: ESC + 'E\x01', BOLD_OFF: ESC + 'E\x00',
-  DOUBLE_SIZE: GS + '!\x11', NORMAL_SIZE: GS + '!\x00',
-  CUT: GS + 'VA\x00', FEED_3: ESC + 'd\x03', LINE_SPACING: ESC + '3\x20',
+  INIT:         ESC + '@',
+  ALIGN_LEFT:   ESC + 'a\x00',
+  ALIGN_CENTER: ESC + 'a\x01',
+  BOLD_ON:      ESC + 'E\x01',
+  BOLD_OFF:     ESC + 'E\x00',
+  DOUBLE_SIZE:  GS  + '!\x11',
+  NORMAL_SIZE:  GS  + '!\x00',
+  CUT:          GS  + 'VA\x00',
+  FEED_3:       ESC + 'd\x03',
+  LINE_SPACING: ESC + '3\x20',
 };
 const PAPER_COLS = 48;
-const padR = (s, w) => String(s ?? '').slice(0, w).padEnd(w);
-const padL = (s, w) => String(s ?? '').slice(0, w).padStart(w);
+const padR   = (s, w) => String(s ?? '').slice(0, w).padEnd(w);
+const padL   = (s, w) => String(s ?? '').slice(0, w).padStart(w);
 const twoCol = (label, val, w = PAPER_COLS) => {
-  const v = String(val);
-  const maxL = w - v.length - 1;
+  const v = String(val); const maxL = w - v.length - 1;
   return String(label).slice(0, maxL).padEnd(maxL) + ' ' + v;
 };
-const fmtMoney = (n, cur = 'INR') => {
-  const num = parseFloat(n || 0);
-  return cur === 'INR' ? `Rs.${num.toFixed(2)}` : `${cur}${num.toFixed(2)}`;
-};
+const fmtMoney = (n, cur = 'INR') => { const num = parseFloat(n || 0); return cur === 'INR' ? `Rs.${num.toFixed(2)}` : `${cur}${num.toFixed(2)}`; };
 
 function buildESCPOS(bill, settings = {}) {
-  const s = { ...settings, ...(bill.settings || {}) };
-  const cur = s.currency || 'INR';
-  const fmt = (n) => fmtMoney(n, cur);
-  const W = PAPER_COLS;
-  const div = (c = '-') => c.repeat(W);
-  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
-  });
+  const s = { ...settings, ...(bill.settings || {}) }; const cur = s.currency || 'INR';
+  const fmt = (n) => fmtMoney(n, cur); const W = PAPER_COLS; const div = (c = '-') => c.repeat(W);
+  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
   let out = ESCPOS.INIT + ESCPOS.LINE_SPACING + ESCPOS.ALIGN_CENTER;
-  if (s.showStoreName !== false && s.storeName)
-    out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_SIZE + s.storeName + '\n' + ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+  if (s.showStoreName !== false && s.storeName) out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_SIZE + s.storeName + '\n' + ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
   if (s.address) out += s.address + '\n';
   if (s.showGST && s.gstNumber) out += 'GST: ' + s.gstNumber + '\n';
   out += '\n' + ESCPOS.ALIGN_LEFT + div() + '\n';
@@ -168,15 +181,10 @@ function buildESCPOS(bill, settings = {}) {
     out += padR(name, 22) + padR(String(item.quantity), 4) + padL(fmt(item.price), 10) + padL(fmt(item.total), 10) + '\n';
   });
   out += div() + '\n' + twoCol('Subtotal:', fmt(bill.subtotal)) + '\n';
-  if (parseFloat(bill.discount) > 0)
-    out += ESCPOS.BOLD_ON + twoCol('Discount:', '-' + fmt(bill.discount)) + '\n' + ESCPOS.BOLD_OFF;
+  if (parseFloat(bill.discount) > 0) out += ESCPOS.BOLD_ON + twoCol('Discount:', '-' + fmt(bill.discount)) + '\n' + ESCPOS.BOLD_OFF;
   if (parseFloat(bill.taxAmount) > 0) {
-    if (s.taxType === 'GST_SPLIT') {
-      out += twoCol(`CGST (${s.cgst}%):`, fmt(bill.taxAmount / 2)) + '\n';
-      out += twoCol(`SGST (${s.sgst}%):`, fmt(bill.taxAmount / 2)) + '\n';
-    } else {
-      out += twoCol(`Tax (${s.taxPercent || 0}%):`, fmt(bill.taxAmount)) + '\n';
-    }
+    if (s.taxType === 'GST_SPLIT') out += twoCol(`CGST (${s.cgst}%):`, fmt(bill.taxAmount / 2)) + '\n' + twoCol(`SGST (${s.sgst}%):`, fmt(bill.taxAmount / 2)) + '\n';
+    else out += twoCol(`Tax (${s.taxPercent || 0}%):`, fmt(bill.taxAmount)) + '\n';
   }
   out += div('=') + '\n' + ESCPOS.BOLD_ON + ESCPOS.ALIGN_CENTER + ESCPOS.DOUBLE_SIZE + 'TOTAL: ' + fmt(bill.total) + '\n' + ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
   out += ESCPOS.ALIGN_CENTER + div() + '\n' + (s.footerMessage || 'Thank You! Visit Again') + '\n\n' + ESCPOS.FEED_3 + ESCPOS.CUT;
@@ -192,51 +200,37 @@ async function loadQZ() {
     if (window.qz) { _qz = window.qz; return resolve(_qz); }
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
-    s.onload = () => { _qz = window.qz; resolve(_qz); };
-    s.onerror = () => resolve(null);
+    s.onload = () => { _qz = window.qz; resolve(_qz); }; s.onerror = () => resolve(null);
     document.head.appendChild(s);
   });
 }
 async function connectQZ() {
   if (_qzConn) return { ok: true };
-  if (_qzConnecting) {
-    await new Promise((r) => setTimeout(r, 2000));
-    return _qzConn ? { ok: true } : { ok: false, error: 'Timeout' };
-  }
+  if (_qzConnecting) { await new Promise((r) => setTimeout(r, 2000)); return _qzConn ? { ok: true } : { ok: false, error: 'Timeout' }; }
   _qzConnecting = true;
   try {
-    const qz = await loadQZ();
-    if (!qz) throw new Error('QZ unavailable');
+    const qz = await loadQZ(); if (!qz) throw new Error('QZ unavailable');
     if (!qz.websocket.isActive()) await qz.websocket.connect({ retries: 2, delay: 1 });
-    _qzConn = true;
-    qz.websocket.setClosedCallbacks(() => { _qzConn = false; });
-    return { ok: true };
-  } catch (e) { return { ok: false, error: e.message }; }
-  finally { _qzConnecting = false; }
+    _qzConn = true; qz.websocket.setClosedCallbacks(() => { _qzConn = false; }); return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; } finally { _qzConnecting = false; }
 }
 async function getQZPrinters() {
-  const c = await connectQZ();
-  if (!c.ok) return [];
+  const c = await connectQZ(); if (!c.ok) return [];
   try { const qz = await loadQZ(); return (await qz.printers.find()) || []; } catch { return []; }
 }
 async function qzPrintRaw(data, printerName) {
-  const c = await connectQZ();
-  if (!c.ok) return { ok: false, error: c.error };
+  const c = await connectQZ(); if (!c.ok) return { ok: false, error: c.error };
   try {
     const qz = await loadQZ();
     const cfg = qz.configs.create(printerName, { encoding: 'Cp1252', copies: 1 });
-    await qz.print(cfg, [{ type: 'raw', format: 'plain', data }]);
-    return { ok: true };
+    await qz.print(cfg, [{ type: 'raw', format: 'plain', data }]); return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
 function browserPrintFallback(bill, settings = {}) {
-  const s = { ...settings, ...(bill.settings || {}) };
-  const cur = s.currency || 'INR';
+  const s = { ...settings, ...(bill.settings || {}) }; const cur = s.currency || 'INR';
   const fmtN = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(parseFloat(n || 0));
-  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
-  });
+  const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
   const itemRows = (bill.items || []).map((it) => {
     const displayName = it.size ? `${it.name} [${it.size}]` : it.name;
     return `<tr><td class="item-name">${displayName}</td><td class="col-qty">${it.quantity}</td><td class="col-rate">${fmtN(it.price)}</td><td class="col-amt">${fmtN(it.total)}</td></tr>`;
@@ -248,71 +242,62 @@ function browserPrintFallback(bill, settings = {}) {
     taxRows = `<tr class="summary-row"><td colspan="3">Tax (${s.taxPercent || 0}%)</td><td class="col-amt">${fmtN(bill.taxAmount)}</td></tr>`;
   }
   const discountRow = parseFloat(bill.discount) > 0 ? `<tr class="summary-row"><td colspan="3">Discount</td><td class="col-amt">-${fmtN(bill.discount)}</td></tr>` : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${bill.billNumber}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:80mm auto;margin:0mm}html,body{width:80mm;margin:0;padding:0;background:#fff;color:#000}body{font-family:Arial,Helvetica,'Liberation Sans',sans-serif;font-size:11.5px;font-weight:500;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact}.receipt{width:76mm;margin:0 auto;padding:4mm 0 6mm 0}.store-name{text-align:center;font-size:17px;font-weight:900;letter-spacing:.5px;margin-bottom:1.5mm;text-transform:uppercase}.store-address{text-align:center;font-size:10px;font-weight:600;line-height:1.4;margin-bottom:1mm}.store-gst{text-align:center;font-size:10px;font-weight:700;margin-bottom:1.5mm}.divider-dash{border:none;border-top:1.5px dashed #000;margin:2mm 0}.divider-solid{border:none;border-top:2px solid #000;margin:2mm 0}.divider-double{border:none;border-top:3px double #000;margin:2mm 0}.meta-block{font-size:10.5px;font-weight:600;line-height:1.6}.meta-block .bill-no{font-size:11px;font-weight:800}table{width:100%;border-collapse:collapse;table-layout:fixed}thead tr{border-bottom:1.5px solid #000}thead th{font-size:10.5px;font-weight:800;padding:1.5mm 0;text-transform:uppercase}th.col-item{text-align:left;width:44%}th.col-qty{text-align:center;width:10%}th.col-rate{text-align:right;width:23%}th.col-amt{text-align:right;width:23%}tbody tr{border-bottom:.75px dashed #555}tbody tr:last-child{border-bottom:none}tbody td{font-size:11px;font-weight:600;padding:2mm 0;vertical-align:top}td.item-name{text-align:left;word-break:break-word;padding-right:2mm;font-weight:700}td.col-qty{text-align:center}td.col-rate{text-align:right}td.col-amt{text-align:right;font-weight:700}.summary-section{width:100%;border-collapse:collapse;margin-top:1mm}.summary-row td{font-size:10.5px;font-weight:600;padding:1mm 0}.summary-row td:first-child{text-align:left}.summary-row td.col-amt{text-align:right;font-weight:700}.subtotal-row td{font-size:11px;font-weight:700;padding:1.5mm 0}.subtotal-row td:first-child{text-align:left}.subtotal-row td.col-amt{text-align:right}.total-row{width:100%;border-collapse:collapse}.total-row td{font-size:15px;font-weight:900;padding:2mm 0 1mm 0;letter-spacing:.3px}.total-row td:first-child{text-align:left}.total-row td:last-child{text-align:right}.footer{text-align:center;font-size:10.5px;font-weight:700;margin-top:3mm;letter-spacing:.3px}</style></head><body><div class="receipt">${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}${s.address ? `<div class="store-address">${s.address}</div>` : ''}${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}<hr class="divider-dash"><div class="meta-block"><div class="bill-no">Bill No : ${bill.billNumber}</div><div>Date    : ${dateStr}</div><div>Payment : ${bill.paymentMode}</div>${bill.note ? `<div>Note    : ${String(bill.note).slice(0, 42)}</div>` : ''}</div><hr class="divider-dash"><table><thead><tr><th class="col-item">Item</th><th class="col-qty">Qty</th><th class="col-rate">Rate</th><th class="col-amt">Amt</th></tr></thead><tbody>${itemRows}</tbody></table><hr class="divider-solid"><table class="summary-section"><tr class="subtotal-row"><td colspan="3">Subtotal</td><td class="col-amt">${fmtN(bill.subtotal)}</td></tr>${discountRow}${taxRows}</table><hr class="divider-double"><table class="total-row"><tr><td>TOTAL</td><td>${fmtN(bill.total)}</td></tr></table><hr class="divider-dash"><div class="footer">${s.footerMessage || 'Thank You! Visit Again'}</div></div><script>window.onload=function(){window.print();setTimeout(function(){window.close();},700);}<\/script></body></html>`;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${bill.billNumber}</title><style>*{margin:0;padding:0;box-sizing:border-box;}@page{size:80mm auto;margin:0mm;}html,body{width:80mm;margin:0;padding:0;background:#fff;color:#000;}body{font-family:Arial,Helvetica,'Liberation Sans',sans-serif;font-size:11.5px;font-weight:500;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.receipt{width:76mm;margin:0 auto;padding:4mm 0 6mm 0;}.store-name{text-align:center;font-size:17px;font-weight:900;letter-spacing:0.5px;margin-bottom:1.5mm;text-transform:uppercase;}.store-address{text-align:center;font-size:10px;font-weight:600;line-height:1.4;margin-bottom:1mm;}.store-gst{text-align:center;font-size:10px;font-weight:700;margin-bottom:1.5mm;}.divider-dash{border:none;border-top:1.5px dashed #000;margin:2mm 0;}.divider-solid{border:none;border-top:2px solid #000;margin:2mm 0;}.divider-double{border:none;border-top:3px double #000;margin:2mm 0;}.meta-block{font-size:10.5px;font-weight:600;line-height:1.6;}.meta-block .bill-no{font-size:11px;font-weight:800;}table{width:100%;border-collapse:collapse;table-layout:fixed;}thead tr{border-bottom:1.5px solid #000;}thead th{font-size:10.5px;font-weight:800;padding:1.5mm 0;text-transform:uppercase;}th.col-item{text-align:left;width:44%;}th.col-qty{text-align:center;width:10%;}th.col-rate{text-align:right;width:23%;}th.col-amt{text-align:right;width:23%;}tbody tr{border-bottom:0.75px dashed #555;}tbody tr:last-child{border-bottom:none;}tbody td{font-size:11px;font-weight:600;padding:2mm 0;vertical-align:top;}td.item-name{text-align:left;word-break:break-word;padding-right:2mm;font-weight:700;}td.col-qty{text-align:center;}td.col-rate{text-align:right;}td.col-amt{text-align:right;font-weight:700;}.summary-section{width:100%;border-collapse:collapse;margin-top:1mm;}.summary-row td{font-size:10.5px;font-weight:600;padding:1mm 0;}.summary-row td:first-child{text-align:left;}.summary-row td.col-amt{text-align:right;font-weight:700;}.subtotal-row td{font-size:11px;font-weight:700;padding:1.5mm 0;}.subtotal-row td:first-child{text-align:left;}.subtotal-row td.col-amt{text-align:right;}.total-row{width:100%;border-collapse:collapse;}.total-row td{font-size:15px;font-weight:900;padding:2mm 0 1mm 0;letter-spacing:0.3px;}.total-row td:first-child{text-align:left;}.total-row td:last-child{text-align:right;}.footer{text-align:center;font-size:10.5px;font-weight:700;margin-top:3mm;letter-spacing:0.3px;}</style></head><body><div class="receipt">${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}${s.address ? `<div class="store-address">${s.address}</div>` : ''}${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}<hr class="divider-dash"><div class="meta-block"><div class="bill-no">Bill No : ${bill.billNumber}</div><div>Date    : ${dateStr}</div><div>Payment : ${bill.paymentMode}</div>${bill.note ? `<div>Note    : ${String(bill.note).slice(0, 42)}</div>` : ''}</div><hr class="divider-dash"><table><thead><tr><th class="col-item">Item</th><th class="col-qty">Qty</th><th class="col-rate">Rate</th><th class="col-amt">Amt</th></tr></thead><tbody>${itemRows}</tbody></table><hr class="divider-solid"><table class="summary-section"><tr class="subtotal-row"><td colspan="3">Subtotal</td><td class="col-amt">${fmtN(bill.subtotal)}</td></tr>${discountRow}${taxRows}</table><hr class="divider-double"><table class="total-row"><tr><td>TOTAL</td><td>${fmtN(bill.total)}</td></tr></table><hr class="divider-dash"><div class="footer">${s.footerMessage || 'Thank You! Visit Again'}</div></div><script>window.onload=function(){window.print();setTimeout(function(){window.close();},700);};<\/script></body></html>`;
   const win = window.open('', '_blank', 'width=380,height=680');
   if (win) { win.document.write(html); win.document.close(); }
 }
-
 async function printBillAuto(bill, settings, printerName) {
   if (!printerName) { browserPrintFallback(bill, settings); return { method: 'browser', ok: true }; }
   const result = await qzPrintRaw(buildESCPOS(bill, settings), printerName);
   if (result.ok) return { method: 'qz', ok: true };
-  browserPrintFallback(bill, settings);
-  return { method: 'browser', ok: true, error: result.error };
+  browserPrintFallback(bill, settings); return { method: 'browser', ok: true, error: result.error };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ══ MEMOIZED CART ITEM ═══════════════════════════════════════════════════════
+// ══ MEMOIZED CART ROW ═══════════════════════════════════════════════════════
+// Only re-renders when THIS item's data changes.
 // ─────────────────────────────────────────────────────────────────────────────
-const CartItem = memo(function CartItem({
-  item, idx, fmt,
-  onUpdateQty, onUpdateItemDiscount, onRemove,
+const CartRow = React.memo(function CartRow({
+  item, idx, fmt, editingQty, setEditingQty, updateQuantity, updateItemDiscount, removeItem,
 }) {
-  const [editingQty, setEditingQty] = useState('');
-  const [isEditing, setIsEditing]   = useState(false);
-
-  const handleQtyBlur = useCallback(() => {
-    onUpdateQty(idx, parseInt(editingQty) || 1);
-    setIsEditing(false);
-  }, [idx, editingQty, onUpdateQty]);
-
-  const handleQtyKeyDown = useCallback((e) => {
-    if (e.key === 'Enter') { onUpdateQty(idx, parseInt(editingQty) || 1); setIsEditing(false); }
-  }, [idx, editingQty, onUpdateQty]);
-
   return (
     <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow">
       <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">{idx + 1}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
-          {item.size && <span className="flex-shrink-0 inline-flex items-center justify-center w-8 h-6 bg-blue-600 text-white rounded text-xs font-bold">{item.size}</span>}
+          {item.size && (
+            <span className="flex-shrink-0 inline-flex items-center justify-center w-8 h-6 bg-blue-600 text-white rounded text-xs font-bold">{item.size}</span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-slate-500">{fmt(item.price)} each</span>
-          {item.stock !== undefined && item.stock <= 5 && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded-full">Low: {item.stock}</span>}
+          {item.stock !== undefined && item.stock <= 5 && (
+            <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded-full">Low: {item.stock}</span>
+          )}
         </div>
         <div className="flex items-center gap-1 mt-1.5">
           <Tag size={9} className="text-slate-400" />
           <span className="text-[10px] text-slate-400">Discount:</span>
-          <input type="number" min="0" value={item.itemDiscount || ''} placeholder="0" onChange={(e) => onUpdateItemDiscount(idx, e.target.value)} className="w-16 text-[11px] border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300" />
+          <input type="number" min="0" value={item.itemDiscount || ''} placeholder="0"
+            onChange={(e) => updateItemDiscount(idx, e.target.value)}
+            className="w-16 text-[11px] border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300" />
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button onClick={() => onUpdateQty(idx, item.quantity - 1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><Minus size={13} /></button>
-        <input
-          type="number" min="1"
-          value={isEditing ? editingQty : item.quantity}
-          onChange={(e) => { setIsEditing(true); setEditingQty(e.target.value); }}
-          onBlur={handleQtyBlur} onKeyDown={handleQtyKeyDown}
-          className="w-12 text-center text-sm font-bold border border-slate-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
-        <button onClick={() => onUpdateQty(idx, item.quantity + 1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><Plus size={13} /></button>
+        <button onClick={() => updateQuantity(idx, item.quantity - 1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><Minus size={13} /></button>
+        <input type="number" min="1"
+          value={editingQty?.idx === idx ? editingQty.value : item.quantity}
+          onChange={(e) => setEditingQty({ idx, value: e.target.value })}
+          onBlur={() => { if (editingQty?.idx === idx) { updateQuantity(idx, parseInt(editingQty.value) || 1); setEditingQty(null); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { updateQuantity(idx, parseInt(editingQty?.value || item.quantity) || 1); setEditingQty(null); } }}
+          className="w-12 text-center text-sm font-bold border border-slate-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        <button onClick={() => updateQuantity(idx, item.quantity + 1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><Plus size={13} /></button>
       </div>
       <div className="text-right flex-shrink-0 w-20">
         <p className="text-sm font-bold text-slate-800">{fmt(item.price * item.quantity - (item.itemDiscount || 0))}</p>
       </div>
-      <button onClick={() => onRemove(idx)} className="w-7 h-7 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center flex-shrink-0"><Trash2 size={14} /></button>
+      <button onClick={() => removeItem(idx)} className="w-7 h-7 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center flex-shrink-0"><Trash2 size={14} /></button>
     </div>
   );
 });
@@ -320,16 +305,13 @@ const CartItem = memo(function CartItem({
 // ─────────────────────────────────────────────────────────────────────────────
 // ── COMBINED BARCODE + SEARCH INPUT ─────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-const CombinedInput = memo(function CombinedInput({
-  onScan, onSearch, disabled = false,
-  searchResults, onSelectProduct, searchLoading,
-}) {
-  const inputRef   = useRef(null);
-  const [value, setValue] = useState('');
+function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSelectProduct, searchLoading }) {
+  const inputRef = useRef(null);
+  const [value, setValue]               = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(-1);
-  const scanTimer  = useRef(null);
-  const lockRef    = useRef(null);
+  const [activeIdx, setActiveIdx]       = useState(-1);
+  const scanTimer = useRef(null);
+  const lockRef   = useRef(null);
 
   const tryFocus = useCallback(() => {
     if (disabled) return;
@@ -360,47 +342,33 @@ const CombinedInput = memo(function CombinedInput({
   }, [searchResults, value]);
 
   const handleChange = (e) => {
-    const v = e.target.value;
-    setValue(v);
+    const v = e.target.value; setValue(v);
     clearTimeout(scanTimer.current);
-    // ── Instant local search (memory) with 50ms debounce ──
-    scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 50);
+    scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 80);
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault();
-      const v = value.trim();
-      if (!v) return;
+      e.preventDefault(); const v = value.trim(); if (!v) return;
       if (showDropdown && searchResults?.length > 0) {
         const idx = activeIdx >= 0 ? activeIdx : 0;
         if (searchResults[idx]) { onSelectProduct(searchResults[idx]); setValue(''); setShowDropdown(false); return; }
       }
-      onScan(v);
-      setValue('');
-      setShowDropdown(false);
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === 'Escape') { setShowDropdown(false); setValue(''); }
+      onScan(v); setValue(''); setShowDropdown(false);
+    } else if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Escape') { setShowDropdown(false); setValue(''); }
   };
 
   return (
     <div className="relative">
       <div className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"><ScanLine size={15} /></div>
-      <input
-        ref={inputRef} type="text" value={value}
-        onChange={handleChange} onKeyDown={handleKeyDown}
+      <input ref={inputRef} type="text" value={value} onChange={handleChange} onKeyDown={handleKeyDown}
         onFocus={() => searchResults?.length > 0 && value.trim() && setShowDropdown(true)}
         onBlur={() => setTimeout(() => setShowDropdown(false), 180)}
-        disabled={disabled}
-        placeholder="Scan barcode or type product name…"
+        disabled={disabled} placeholder="Scan barcode or type product name…"
         className="w-full pl-9 pr-28 py-2.5 rounded-xl border-2 border-blue-300 bg-blue-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono disabled:opacity-50"
-        autoComplete="off" spellCheck={false} data-barcode-input="true"
-      />
+        autoComplete="off" spellCheck={false} data-barcode-input="true" />
       <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
         {searchLoading && <div className="w-3.5 h-3.5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />}
         {value && <span className="text-[10px] text-blue-500 font-mono bg-blue-100 px-1.5 py-0.5 rounded">{value.length}ch</span>}
@@ -409,7 +377,8 @@ const CombinedInput = memo(function CombinedInput({
       {showDropdown && searchResults && searchResults.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-40 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden mt-1 max-h-64 overflow-y-auto">
           {searchResults.map((p, i) => (
-            <button key={p.id} onMouseDown={() => { onSelectProduct(p); setValue(''); setShowDropdown(false); }}
+            <button key={p.id}
+              onMouseDown={() => { onSelectProduct(p); setValue(''); setShowDropdown(false); }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-blue-50 ${i === activeIdx ? 'bg-blue-50' : ''} ${i !== 0 ? 'border-t border-slate-100' : ''}`}
             >
               <div className="flex-1 min-w-0">
@@ -423,7 +392,7 @@ const CombinedInput = memo(function CombinedInput({
                 </div>
               </div>
               <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium flex-shrink-0">
-                <Layers size={10} />{(p.variants || []).length} sizes
+                <Layers size={10} /> {(p.variants || []).length} sizes
               </div>
             </button>
           ))}
@@ -431,7 +400,7 @@ const CombinedInput = memo(function CombinedInput({
       )}
     </div>
   );
-});
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── SIZE PICKER MODAL ────────────────────────────────────────────────────────
@@ -457,8 +426,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
         ) : (
           <div className="space-y-2">
             {variants.map((v) => {
-              const isOut = v.stock === 0;
-              const sel = isSelected(v);
+              const isOut = v.stock === 0; const sel = isSelected(v);
               return (
                 <button key={v.id} onClick={() => toggleVariant(v)} disabled={isOut}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${isOut ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' : sel ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200' : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50'}`}
@@ -467,10 +435,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
                     <span className={`inline-flex items-center justify-center w-10 h-8 rounded-lg text-xs font-bold transition-all ${isOut ? 'bg-slate-100 text-slate-300' : sel ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
                       {sel ? <CheckCircle size={14} /> : v.size}
                     </span>
-                    <div className="text-left">
-                      <span className="font-semibold">{v.size}</span>
-                      <span className="ml-2 text-indigo-600">₹{Number(v.price).toLocaleString('en-IN')}</span>
-                    </div>
+                    <div className="text-left"><span className="font-semibold">{v.size}</span><span className="ml-2 text-indigo-600">₹{Number(v.price).toLocaleString('en-IN')}</span></div>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOut ? 'bg-red-50 text-red-500' : v.stock < 5 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
                     {isOut ? 'Out of stock' : `${v.stock} left`}
@@ -483,8 +448,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2.5 text-slate-500 hover:text-slate-700 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 font-medium">Cancel</button>
           <button onClick={() => { if (selected.length > 0) onConfirm(product, selected); }} disabled={selected.length === 0}
-            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold transition-all ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-          >
+            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold transition-all ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
             {selected.length === 0 ? 'Confirm' : `Confirm (${selected.length} size${selected.length > 1 ? 's' : ''})`}
           </button>
         </div>
@@ -505,11 +469,7 @@ function PrintSettingsModal({ onClose, printerName, onPrinterChange, qzStatus })
     setLoading(true);
     try { setPrinters(await getQZPrinters()); } catch (_) { setPrinters([]); } finally { setLoading(false); }
   };
-  const qzColors = {
-    connected:    'bg-green-100 text-green-700 border-green-300',
-    connecting:   'bg-yellow-100 text-yellow-700 border-yellow-300',
-    disconnected: 'bg-red-100 text-red-700 border-red-300',
-  };
+  const qzColors = { connected: 'bg-green-100 text-green-700 border-green-300', connecting: 'bg-yellow-100 text-yellow-700 border-yellow-300', disconnected: 'bg-red-100 text-red-700 border-red-300' };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
@@ -564,67 +524,60 @@ function PrintSettingsModal({ onClose, printerName, onPrinterChange, qzStatus })
 // ══ MAIN COMPONENT ═══════════════════════════════════════════════════════════
 // ─────────────────────────────────────────────────────────────────────────────
 export default function EmployeeBillingPage() {
-  const [employee, setEmployee]         = useState(null);
+  const [employee, setEmployee]           = useState(null);
   const [hasPermission, setHasPermission] = useState(null);
-  const [settings, setSettings]         = useState(null);
-  const [activeTab, setActiveTab]       = useState('billing');
+  const [settings, setSettings]           = useState(null);
+  const [activeTab, setActiveTab]         = useState('billing');
 
-  // ── LOCAL cart state (NOT Redux) ──────────────────────────────
-  const [cartItems, setCartItems]       = useState([]);
-  const [billDiscount, setBillDiscount] = useState(0);
-  const [paymentMode, setPaymentMode]   = useState('CASH');
-  const [note, setNote]                 = useState('');
-
-  // ── Products ──────────────────────────────────────────────────
-  const [productCount, setProductCount] = useState(0);
-
-  // ── UI state ──────────────────────────────────────────────────
-  const [suggestions, setSuggestions]   = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [loading, setLoading]           = useState(false);
-  const [successBill, setSuccessBill]   = useState(null);
-  const [queueCount, setQueueCount]     = useState(0);
-  const [isOnline, setIsOnline]         = useState(true);
-  const [syncing, setSyncing]           = useState(false);
-  const [duplicateModal, setDuplicateModal] = useState(null);
-  const [sizePickerModal, setSizePickerModal] = useState(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Billing
+  const [suggestions, setSuggestions]           = useState([]);
+  const [cartItems, setCartItems]               = useState([]);
+  const [billDiscount, setBillDiscount]         = useState(0);
+  const [paymentMode, setPaymentMode]           = useState('CASH');
+  const [note, setNote]                         = useState('');
+  const [loading, setLoading]                   = useState(false);
+  const [successBill, setSuccessBill]           = useState(null);
+  const [queueCount, setQueueCount]             = useState(0);
+  const [isOnline, setIsOnline]                 = useState(true);
+  const [syncing, setSyncing]                   = useState(false);
+  const [duplicateModal, setDuplicateModal]     = useState(null);
+  const [sizePickerModal, setSizePickerModal]   = useState(null);
+  const [editingQty, setEditingQty]             = useState(null);
+  const [isFullscreen, setIsFullscreen]         = useState(false);
+  const [localProducts, setLocalProducts]       = useState([]);
   const [lastScanFeedback, setLastScanFeedback] = useState(null);
 
-  // ── Print ─────────────────────────────────────────────────────
-  const [printerName, setPrinterName]   = useState('');
-  const [qzStatus, setQzStatus]         = useState('disconnected');
+  // Print
+  const [printerName, setPrinterName]             = useState('');
+  const [qzStatus, setQzStatus]                   = useState('disconnected');
   const [showPrintSettings, setShowPrintSettings] = useState(false);
-  const [lastPrintMethod, setLastPrintMethod] = useState(null);
+  const [lastPrintMethod, setLastPrintMethod]     = useState(null);
 
-  // ── History ───────────────────────────────────────────────────
-  const [historyBills, setHistoryBills] = useState([]);
-  const [localBills, setLocalBills]     = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyPage, setHistoryPage]   = useState(1);
-  const [todayStats, setTodayStats]     = useState({ count: 0, revenue: 0 });
-  const [historySearch, setHistorySearch] = useState('');
-  const [historyPM, setHistoryPM]       = useState('');
+  // History
+  const [historyBills, setHistoryBills]       = useState([]);
+  const [localBills, setLocalBills]           = useState([]);
+  const [historyLoading, setHistoryLoading]   = useState(false);
+  const [historyTotal, setHistoryTotal]       = useState(0);
+  const [historyPage, setHistoryPage]         = useState(1);
+  const [todayStats, setTodayStats]           = useState({ count: 0, revenue: 0 });
+  const [historySearch, setHistorySearch]     = useState('');
+  const [historyPM, setHistoryPM]             = useState('');
   const [historyDateFrom, setHistoryDateFrom] = useState('');
   const [historyDateTo, setHistoryDateTo]     = useState('');
-  const [expandedBill, setExpandedBill] = useState(null);
-  const [showFilters, setShowFilters]   = useState(false);
-  const [queueBillIds, setQueueBillIds] = useState(new Set());
+  const [expandedBill, setExpandedBill]       = useState(null);
+  const [showFilters, setShowFilters]         = useState(false);
+  const [queueBillIds, setQueueBillIds]       = useState(new Set());
 
-  // ── Refs ──────────────────────────────────────────────────────
-  const syncTimerRef     = useRef(null);
-  const apiCache         = useRef({});
-  const historyTimer     = useRef(null);
-  const feedbackTimer    = useRef(null);
-  const refreshScheduler = useRef(null);
+  const syncTimerRef  = useRef(null);
+  const historyTimer  = useRef(null);
+  const feedbackTimer = useRef(null);
 
-  // ── Memoized totals ───────────────────────────────────────────
+  // ── Memoized totals ───────────────────────────────────────────────────────
   const { subtotal, discounted, taxResult, grandTotal } = useMemo(() => {
-    const sub = cartItems.reduce((s, i) => s + i.price * i.quantity - (i.itemDiscount || 0), 0);
-    const dis = Math.max(0, sub - Number(billDiscount || 0));
-    const tax = calculateTax(dis, settings);
-    return { subtotal: sub, discounted: dis, taxResult: tax, grandTotal: tax.total };
+    const sub  = cartItems.reduce((s, i) => s + i.price * i.quantity - (i.itemDiscount || 0), 0);
+    const disc = Math.max(0, sub - Number(billDiscount || 0));
+    const tax  = calculateTax(disc, settings);
+    return { subtotal: sub, discounted: disc, taxResult: tax, grandTotal: tax.total };
   }, [cartItems, billDiscount, settings]);
 
   const fmt = useCallback((n) => formatCurrency(n, settings), [settings]);
@@ -635,9 +588,8 @@ export default function EmployeeBillingPage() {
     feedbackTimer.current = setTimeout(() => setLastScanFeedback(null), 2500);
   }, []);
 
-  // ── Init ──────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Auth check
     const empRaw = localStorage.getItem('empData') || localStorage.getItem('employeeData');
     if (empRaw) {
       try {
@@ -648,31 +600,12 @@ export default function EmployeeBillingPage() {
     } else { setHasPermission(false); }
 
     const token = getEmpToken();
+    if (token) fetch('/api/store/settings', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
 
-    // Settings
-    if (token)
-      fetch('/api/store/settings', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
-
-    // Load products into memory cache
-    initProductCache({
-      storeId: 'employee',
-      token,
-      onRefresh: (fresh) => setProductCount(fresh.length),
-    }).then((cached) => { if (cached.length) setProductCount(cached.length); }).catch(console.error);
-
-    // Background refresh scheduler
-    refreshScheduler.current = createRefreshScheduler({
-      storeId: 'employee',
-      token,
-      onRefresh: (fresh) => setProductCount(fresh.length),
-    });
-    refreshScheduler.current.start();
-
-    // Network
-    const onOnline  = () => { setIsOnline(true);  triggerSync(); };
+    const onOnline  = () => { setIsOnline(true); triggerSync(); refreshProductCache(); };
     const onOffline = () => setIsOnline(false);
-    window.addEventListener('online',  onOnline);
+    window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     setIsOnline(navigator.onLine);
 
@@ -683,38 +616,37 @@ export default function EmployeeBillingPage() {
     const onFS = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFS);
 
+    const cached = getProductsFromCache();
+    if (cached) setLocalProducts(cached);
+    if (navigator.onLine) refreshProductCache();
+
     const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
     setPrinterName(savedPrinter);
-    setQzStatus('connecting');
-    connectQZ().then((r) => setQzStatus(r.ok ? 'connected' : 'disconnected'));
+    initQZConnection();
 
-    // Background sync every 15s
     const bgSync = setInterval(() => { if (navigator.onLine) runSync(); }, 15000);
 
-    // ── FIXED: single return, no duplicate ──
+    // Single cleanup — no duplicate return
     return () => {
-      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
       document.removeEventListener('fullscreenchange', onFS);
       clearTimeout(syncTimerRef.current);
       clearTimeout(feedbackTimer.current);
       clearInterval(bgSync);
-      refreshScheduler.current?.stop();
     };
   }, []); // eslint-disable-line
 
+  const initQZConnection = async () => { setQzStatus('connecting'); const r = await connectQZ(); setQzStatus(r.ok ? 'connected' : 'disconnected'); };
+  const handlePrinterChange = (name) => { setPrinterName(name); try { localStorage.setItem(LS_PRINTER_NAME, name); } catch (_) {} };
+
   useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Escape') { setSuggestions([]); setSizePickerModal(null); setShowPrintSettings(false); }
-    };
+    const handler = (e) => { if (e.key === 'Escape') { setSuggestions([]); setSizePickerModal(null); setShowPrintSettings(false); } };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'history') loadHistory(1);
-  }, [activeTab, historyPM, historyDateFrom, historyDateTo]); // eslint-disable-line
-
+  useEffect(() => { if (activeTab === 'history') loadHistory(1); }, [activeTab, historyPM, historyDateFrom, historyDateTo]); // eslint-disable-line
   useEffect(() => {
     if (activeTab !== 'history') return;
     clearTimeout(historyTimer.current);
@@ -722,43 +654,30 @@ export default function EmployeeBillingPage() {
     return () => clearTimeout(historyTimer.current);
   }, [historySearch]); // eslint-disable-line
 
-  const handlePrinterChange = useCallback((name) => {
-    setPrinterName(name);
-    try { localStorage.setItem(LS_PRINTER_NAME, name); } catch (_) {}
-  }, []);
+  // ── Product cache ─────────────────────────────────────────────────────────
+  const refreshProductCache = async () => {
+    try {
+      const token = getEmpToken();
+      const res   = await fetch('/api/store/products-for-billing', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const data  = await res.json(); const products = data.products || [];
+      setLocalProducts(products); saveProductsToCache(products);
+    } catch (e) { console.warn('Product cache refresh failed:', e); }
+  };
 
-  // ── Search — pure memory, instant ────────────────────────────
+  // ── Search — LOCAL ONLY, instant, no API call during billing ─────────────
   const handleSearch = useCallback((query) => {
     const q = query.trim();
     if (!q) { setSuggestions([]); return; }
+    // Use in-memory Map index from productCache.js — O(k) prefix, instant
+    const results = localSearch(q, 8);
+    setSuggestions(results);
+  }, []); // no deps — localSearch reads module-level _memCache
 
-    // Instant from memory index
-    const local = searchProducts(q, 8);
-    setSuggestions(local);
-
-    // Optional API fallback (cached)
-    if (isOnline && !apiCache.current[q]) {
-      const token = getEmpToken();
-      setSearchLoading(true);
-      fetch(`/api/store/products-for-billing?search=${encodeURIComponent(q)}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          const fresh = data.products || [];
-          apiCache.current[q] = fresh;
-          setSuggestions(fresh);
-        })
-        .catch(() => {})
-        .finally(() => setSearchLoading(false));
-    }
-  }, [isOnline]);
-
-  // ── History ───────────────────────────────────────────────────
+  // ── History ───────────────────────────────────────────────────────────────
   const loadHistory = async (page = 1) => {
     setHistoryLoading(true);
     try {
-      const token = getEmpToken();
+      const token  = getEmpToken();
       const params = new URLSearchParams({
         page: String(page), limit: '50',
         ...(historySearch && { search: historySearch }),
@@ -768,12 +687,9 @@ export default function EmployeeBillingPage() {
       });
       const res  = await fetch(`/api/store/billing?${params}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const data = await res.json();
-      setHistoryBills(data.bills || []);
-      setHistoryTotal(data.total || 0);
-      setHistoryPage(page);
-      setTodayStats(data.todayStats || { count: 0, revenue: 0 });
-    } catch (e) { console.warn('History load failed:', e); }
-    finally { setHistoryLoading(false); }
+      setHistoryBills(data.bills || []); setHistoryTotal(data.total || 0);
+      setHistoryPage(page); setTodayStats(data.todayStats || { count: 0, revenue: 0 });
+    } catch (e) { console.warn('History load failed:', e); } finally { setHistoryLoading(false); }
   };
 
   const toggleFullscreen = () => {
@@ -781,15 +697,12 @@ export default function EmployeeBillingPage() {
     else document.exitFullscreen().catch(console.error);
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // Cart helpers — all useCallback
-  // ─────────────────────────────────────────────────────────────
-  const buildCartItem = useCallback((product, variant) => ({
-    productId: product.id, variantId: variant.id,
-    name: product.name, size: variant.size,
-    price: variant.price, quantity: 1,
+  // ── Cart helpers ──────────────────────────────────────────────────────────
+  const buildCartItem = (product, variant) => ({
+    productId: product.id, variantId: variant.id, name: product.name,
+    size: variant.size, price: variant.price, quantity: 1,
     itemDiscount: 0, total: variant.price, stock: variant.stock,
-  }), []);
+  });
 
   const addVariantToCart = useCallback((product, variant) => {
     const existingIdx = cartItems.findIndex((i) => i.variantId === variant.id);
@@ -797,74 +710,62 @@ export default function EmployeeBillingPage() {
     if (variant.stock === 0) { showScanFeedback('error', `Out of stock: ${product.name} (${variant.size})`); return; }
     setCartItems((prev) => [...prev, buildCartItem(product, variant)]);
     showScanFeedback('success', `✓ ${product.name} (${variant.size})`);
-  }, [cartItems, buildCartItem, showScanFeedback]);
+  }, [cartItems, showScanFeedback]); // eslint-disable-line
 
-  // ── O(1) barcode lookup ───────────────────────────────────────
+  // Barcode scan — O(1) Map lookup via productCache module
   const handleBarcodeScanned = useCallback((barcode) => {
-    const found = findVariantByBarcode(barcode); // O(1) Map lookup
+    const found = findByBarcodeLocal(barcode);
     if (!found) { showScanFeedback('error', `Unknown barcode: ${barcode}`); return; }
     addVariantToCart(found.product, found.variant);
   }, [addVariantToCart, showScanFeedback]);
 
-  const handleProductSelectedFromSearch = useCallback((product) => {
+  const handleProductSelectedFromSearch = (product) => {
     setSuggestions([]);
-    if (!product.variants || product.variants.length === 0) {
-      showScanFeedback('error', 'No variants found for this product'); return;
-    }
+    if (!product.variants || product.variants.length === 0) { showScanFeedback('error', 'No variants found for this product'); return; }
     setSizePickerModal(product);
-  }, [showScanFeedback]);
+  };
 
-  const handleDuplicateIncreaseQty = useCallback(() => {
+  const handleDuplicateIncreaseQty = () => {
     if (!duplicateModal) return;
-    const { existingIdx } = duplicateModal;
-    setCartItems((prev) => prev.map((item, i) => {
-      if (i !== existingIdx) return item;
-      const newQty = Math.min(item.quantity + 1, item.stock || 9999);
-      return { ...item, quantity: newQty, total: item.price * newQty - (item.itemDiscount || 0) };
-    }));
+    updateQuantity(duplicateModal.existingIdx, cartItems[duplicateModal.existingIdx].quantity + 1);
     showScanFeedback('success', `+1 qty: ${duplicateModal.product.name} (${duplicateModal.variant.size})`);
     setDuplicateModal(null);
-  }, [duplicateModal, showScanFeedback]);
-
-  const handleDuplicateNewRow = useCallback(() => {
+  };
+  const handleDuplicateNewRow = () => {
     if (!duplicateModal) return;
     const { product, variant } = duplicateModal;
     setCartItems((prev) => [...prev, { ...buildCartItem(product, variant), variantId: variant.id + '_' + Date.now() }]);
     showScanFeedback('success', `New row: ${product.name} (${variant.size})`);
     setDuplicateModal(null);
-  }, [duplicateModal, buildCartItem, showScanFeedback]);
+  };
 
-  const updateQty = useCallback((idx, qty) => {
-    setCartItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const newQty = Math.max(1, Math.min(qty, item.stock || 9999));
-      return { ...item, quantity: newQty, total: item.price * newQty - (item.itemDiscount || 0) };
+  const updateQuantity = useCallback((idx, qty) => {
+    setCartItems((prev) => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const newQty = Math.max(1, Math.min(qty, it.stock || 9999));
+      return { ...it, quantity: newQty, total: it.price * newQty - (it.itemDiscount || 0) };
     }));
   }, []);
 
   const updateItemDiscount = useCallback((idx, disc) => {
-    setCartItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const d = Math.max(0, Math.min(Number(disc || 0), item.price * item.quantity));
-      return { ...item, itemDiscount: d, total: item.price * item.quantity - d };
+    setCartItems((prev) => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const d = Math.max(0, Math.min(Number(disc || 0), it.price * it.quantity));
+      return { ...it, itemDiscount: d, total: it.price * it.quantity - d };
     }));
   }, []);
 
-  const removeItem  = useCallback((idx) => { setCartItems((prev) => prev.filter((_, i) => i !== idx)); }, []);
-  const clearCart   = useCallback(() => { setCartItems([]); setBillDiscount(0); setNote(''); setPaymentMode('CASH'); }, []);
+  const removeItem = useCallback((idx) => { setCartItems((prev) => prev.filter((_, i) => i !== idx)); }, []);
+  const clearCart  = useCallback(() => { setCartItems([]); setBillDiscount(0); setNote(''); setPaymentMode('CASH'); }, []);
 
-  // ─────────────────────────────────────────────────────────────
-  // Complete bill
-  // ─────────────────────────────────────────────────────────────
-  const completeBill = useCallback(async () => {
+  // ── Complete bill ─────────────────────────────────────────────────────────
+  const completeBill = async () => {
     if (!cartItems.length) return;
     setLoading(true);
-
     const localId    = `ebill_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const billNumber = generateBillNumber();
     const now        = Date.now();
-
-    const billData = {
+    const billData   = {
       localId, billNumber,
       subtotal:    parseFloat(subtotal.toFixed(2)),
       discount:    parseFloat(Number(billDiscount || 0).toFixed(2)),
@@ -872,9 +773,8 @@ export default function EmployeeBillingPage() {
       total:       parseFloat(grandTotal.toFixed(2)),
       paymentMode, note: note || null, createdAt: now, synced: false,
       items: cartItems.map((it) => ({
-        productId: it.productId, variantId: it.variantId,
-        name: it.name, size: it.size, price: it.price,
-        quantity: it.quantity, discount: it.itemDiscount || 0,
+        productId: it.productId, variantId: it.variantId, name: it.name, size: it.size,
+        price: it.price, quantity: it.quantity, discount: it.itemDiscount || 0,
         total: parseFloat((it.price * it.quantity - (it.itemDiscount || 0)).toFixed(2)),
       })),
       settings: {
@@ -885,55 +785,39 @@ export default function EmployeeBillingPage() {
         showGST: settings?.showGST, showStoreName: settings?.showStoreName,
       },
     };
-
     try {
       await idbPut(STORE_LOCAL, billData);
       await idbPut(STORE_QUEUE, billData);
       setLocalBills((prev) => [billData, ...prev].slice(0, 200));
       setQueueBillIds((prev) => new Set([...prev, localId]));
-
       if (isOnline) {
         const token = getEmpToken();
         fetch('/api/inventory/deduct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ billId: billNumber, items: cartItems.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })) }),
+          body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
         }).catch(console.error);
       }
-
       setSuccessBill(billData);
       await refreshQueueCount();
       clearCart();
       setTimeout(() => triggerSync(), 2000);
-
-      setTimeout(async () => {
-        const result = await printBillAuto(billData, settings, printerName);
-        setLastPrintMethod(result.method);
-      }, 400);
-
+      setTimeout(async () => { const result = await printBillAuto(billData, settings, printerName); setLastPrintMethod(result.method); }, 400);
       if (activeTab === 'history') loadHistory(1);
-    } catch (err) {
-      console.error('completeBill error:', err);
-      alert('Failed to save bill. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [cartItems, billDiscount, paymentMode, note, settings, isOnline, printerName, activeTab, subtotal, taxResult, grandTotal, clearCart]);
+    } catch (err) { console.error('completeBill error:', err); alert('Failed to save bill. Please try again.'); }
+    finally { setLoading(false); }
+  };
 
-  // ── Sync ──────────────────────────────────────────────────────
-  const triggerSync = useCallback(() => {
-    clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(runSync, 1500);
-  }, []); // eslint-disable-line
+  // ── Sync ──────────────────────────────────────────────────────────────────
+  const triggerSync = useCallback(() => { clearTimeout(syncTimerRef.current); syncTimerRef.current = setTimeout(runSync, 1500); }, []); // eslint-disable-line
 
   const runSync = async () => {
     if (syncing || !navigator.onLine) return;
-    const queue = await idbGetAll(STORE_QUEUE);
-    if (!queue.length) return;
+    const queue = await idbGetAll(STORE_QUEUE); if (!queue.length) return;
     setSyncing(true);
     try {
       const token = getEmpToken();
-      const res = await fetch('/api/store/billing', {
+      const res   = await fetch('/api/store/billing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(queue),
@@ -943,7 +827,7 @@ export default function EmployeeBillingPage() {
       for (const { localId } of saved) {
         await idbDelete(STORE_QUEUE, localId);
         const allLocal = await idbGetAll(STORE_LOCAL);
-        const bill = allLocal.find((b) => b.localId === localId);
+        const bill     = allLocal.find((b) => b.localId === localId);
         if (bill) await idbPut(STORE_LOCAL, { ...bill, synced: true });
       }
       const remaining = await idbGetAll(STORE_QUEUE);
@@ -951,38 +835,32 @@ export default function EmployeeBillingPage() {
       idbGetAll(STORE_LOCAL).then((bills) => setLocalBills(bills.sort((a, b) => b.createdAt - a.createdAt)));
       await refreshQueueCount();
       if (activeTab === 'history') loadHistory(historyPage);
-    } catch {
-      syncTimerRef.current = setTimeout(runSync, 30000);
-    } finally {
-      setSyncing(false);
-    }
+    } catch { syncTimerRef.current = setTimeout(runSync, 30000); }
+    finally { setSyncing(false); }
   };
 
-  const refreshQueueCount = async () => {
-    const c = await idbCount(STORE_QUEUE).catch(() => 0);
-    setQueueCount(c);
-  };
+  const refreshQueueCount = async () => { const c = await idbCount(STORE_QUEUE).catch(() => 0); setQueueCount(c); };
 
-  const mergedHistoryBills = useMemo(() => {
-    const dbSet = new Set(historyBills.map((b) => b.billNumber));
+  const mergedHistoryBills = () => {
+    const dbSet         = new Set(historyBills.map((b) => b.billNumber));
     const unsyncedLocal = localBills.filter((b) => !dbSet.has(b.billNumber));
     return [
       ...unsyncedLocal.map((b) => ({ ...b, _source: 'local', _synced: !queueBillIds.has(b.localId) })),
       ...historyBills.map((b) => ({ ...b, _source: 'db', _synced: true })),
     ];
-  }, [historyBills, localBills, queueBillIds]);
+  };
 
   const taxLabel = settings?.taxType === 'GST_SPLIT'
     ? `GST (CGST ${settings.cgst}% + SGST ${settings.sgst}%)`
     : `Tax (${settings?.taxPercent || 0}%)`;
 
   const qzIndicator = ({
-    connected:    { cls: 'bg-green-50 text-green-700 border-green-200',    dot: 'bg-green-500',               label: 'QZ Ready' },
+    connected:    { cls: 'bg-green-50 text-green-700 border-green-200',    dot: 'bg-green-500',               label: 'QZ Ready'       },
     connecting:   { cls: 'bg-yellow-50 text-yellow-700 border-yellow-200', dot: 'bg-yellow-400 animate-pulse', label: 'QZ Connecting…' },
-    disconnected: { cls: 'bg-slate-50 text-slate-500 border-slate-200',    dot: 'bg-slate-300',               label: 'Browser Print' },
-  }[qzStatus] || { cls: 'bg-slate-50 text-slate-500 border-slate-200', dot: 'bg-slate-300', label: 'Browser Print' });
+    disconnected: { cls: 'bg-slate-50 text-slate-500 border-slate-200',    dot: 'bg-slate-300',               label: 'Browser Print'  },
+  })[qzStatus] || { cls: 'bg-slate-50 text-slate-500 border-slate-200', dot: 'bg-slate-300', label: 'Browser Print' };
 
-  // ─── Permission gate ──────────────────────────────────────────
+  // ── Permission gate ───────────────────────────────────────────────────────
   if (hasPermission === null) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" /></div>;
   }
@@ -999,9 +877,9 @@ export default function EmployeeBillingPage() {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // RENDER
-  // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       {/* ── TOP BAR ─────────────────────────────────────────────── */}
@@ -1023,21 +901,18 @@ export default function EmployeeBillingPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-semibold border border-orange-200">⚡ Offline — {productCount} cached</span>}
+          {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-semibold border border-orange-200">⚡ Offline — {localProducts.length} cached</span>}
           <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${qzIndicator.dot}`} />
-            {qzIndicator.label}<Settings size={11} />
+            {qzIndicator.label} <Settings size={11} />
           </button>
           {printerName && <span className="hidden md:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 px-2 py-1.5 rounded-lg bg-slate-50 max-w-[120px] truncate" title={printerName}><Printer size={10} /> {printerName}</span>}
-          <button onClick={runSync} disabled={syncing || queueCount === 0}
-            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ${queueCount > 0 ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}
-          >
+          <button onClick={runSync} disabled={syncing || queueCount === 0} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ${queueCount > 0 ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}>
             <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
             {queueCount > 0 ? `${queueCount} unsynced` : 'Synced'}
           </button>
           <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg ${isOnline ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}`}>
-            {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
-            {isOnline ? 'Online' : 'Offline'}
+            {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />} {isOnline ? 'Online' : 'Offline'}
           </div>
           <button onClick={toggleFullscreen} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 border border-slate-200">
             {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
@@ -1052,17 +927,20 @@ export default function EmployeeBillingPage() {
             <div className="p-4 border-b border-slate-100 space-y-2">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500 font-medium">Scan barcode <span className="text-slate-300 mx-1">or</span> type to search</p>
-                {lastScanFeedback && <span className={`text-xs font-medium px-3 py-1 rounded-full ${lastScanFeedback.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{lastScanFeedback.message}</span>}
-                <div className="text-[10px] text-slate-400">{productCount} products cached</div>
+                {lastScanFeedback && (
+                  <span className={`text-xs font-medium px-3 py-1 rounded-full ${lastScanFeedback.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{lastScanFeedback.message}</span>
+                )}
+                <div className="text-[10px] text-slate-400">{localProducts.length} products cached</div>
               </div>
               <CombinedInput
                 onScan={handleBarcodeScanned} onSearch={handleSearch}
                 disabled={!!duplicateModal || !!sizePickerModal || !!showPrintSettings || activeTab !== 'billing'}
-                searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch} searchLoading={searchLoading}
+                searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
+                searchLoading={false}
               />
             </div>
 
-            {/* Cart — memoized rows */}
+            {/* Cart — each row is React.memo'd */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {cartItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-3">
@@ -1071,9 +949,13 @@ export default function EmployeeBillingPage() {
                 </div>
               ) : (
                 cartItems.map((item, idx) => (
-                  <CartItem
-                    key={item.variantId} item={item} idx={idx} fmt={fmt}
-                    onUpdateQty={updateQty} onUpdateItemDiscount={updateItemDiscount} onRemove={removeItem}
+                  <CartRow
+                    key={item.variantId}
+                    item={item} idx={idx} fmt={fmt}
+                    editingQty={editingQty} setEditingQty={setEditingQty}
+                    updateQuantity={updateQuantity}
+                    updateItemDiscount={updateItemDiscount}
+                    removeItem={removeItem}
                   />
                 ))
               )}
@@ -1118,9 +1000,8 @@ export default function EmployeeBillingPage() {
                 <div className="grid grid-cols-4 gap-2">
                   {PAYMENT_MODES.map((pm) => (
                     <button key={pm.id} onClick={() => setPaymentMode(pm.id)}
-                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all text-xs font-medium ${paymentMode === pm.id ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'}`}
-                    >
-                      <pm.icon size={18} />{pm.label}
+                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all text-xs font-medium ${paymentMode === pm.id ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'}`}>
+                      <pm.icon size={18} /> {pm.label}
                     </button>
                   ))}
                 </div>
@@ -1128,23 +1009,19 @@ export default function EmployeeBillingPage() {
 
               <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Note</h3>
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Customer name, phone, or any note…" rows={2} className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-slate-50 resize-none placeholder:text-slate-400" />
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Customer name, phone, or any note…" rows={2}
+                  className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-slate-50 resize-none placeholder:text-slate-400" />
               </div>
 
               <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border ${qzStatus === 'connected' && printerName ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
                 <Printer size={13} />
-                {qzStatus === 'connected' && printerName ? (
-                  <><span className="font-medium">Direct print:</span> {printerName}</>
-                ) : (
-                  <><span>Browser print dialog</span><button onClick={() => setShowPrintSettings(true)} className="ml-auto underline hover:text-blue-600">Set printer</button></>
-                )}
+                {qzStatus === 'connected' && printerName ? <><span className="font-medium">Direct print:</span> {printerName}</> : <><span>Browser print dialog</span><button onClick={() => setShowPrintSettings(true)} className="ml-auto underline hover:text-blue-600">Set printer</button></>}
               </div>
             </div>
 
             <div className="p-4 border-t border-slate-200 flex-shrink-0">
               <button onClick={completeBill} disabled={!cartItems.length || loading}
-                className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
-              >
+                className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
                 {loading ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</> : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>}
               </button>
               <p className="text-center text-xs text-slate-400 mt-2">
@@ -1183,7 +1060,8 @@ export default function EmployeeBillingPage() {
             </div>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search bills by number, note…" className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" />
+              <input type="text" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search bills by number, note…"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" />
             </div>
             {showFilters && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
@@ -1218,7 +1096,7 @@ export default function EmployeeBillingPage() {
             ) : (
               <>
                 <div className="space-y-2">
-                  {mergedHistoryBills.map((bill) => {
+                  {mergedHistoryBills().map((bill) => {
                     const isSynced   = bill._synced !== false;
                     const isExpanded = expandedBill === (bill.id || bill.localId);
                     const createdAt  = bill.createdAt instanceof Date ? bill.createdAt : new Date(bill.createdAt);
@@ -1280,11 +1158,9 @@ export default function EmployeeBillingPage() {
                       </div>
                     );
                   })}
-                  {mergedHistoryBills.length === 0 && !historyLoading && (
+                  {mergedHistoryBills().length === 0 && !historyLoading && (
                     <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
-                      <Receipt size={40} strokeWidth={1} />
-                      <p className="text-sm font-medium">No bills found</p>
-                      <p className="text-xs">Bills you create will appear here</p>
+                      <Receipt size={40} strokeWidth={1} /><p className="text-sm font-medium">No bills found</p><p className="text-xs">Bills you create will appear here</p>
                     </div>
                   )}
                 </div>
@@ -1338,21 +1214,14 @@ export default function EmployeeBillingPage() {
 
       {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
       {sizePickerModal && (
-        <SizePickerModal
-          product={sizePickerModal}
+        <SizePickerModal product={sizePickerModal}
           onConfirm={(product, variants) => { setSizePickerModal(null); variants.forEach((variant) => addVariantToCart(product, variant)); }}
-          onClose={() => setSizePickerModal(null)}
-        />
+          onClose={() => setSizePickerModal(null)} />
       )}
 
       {/* ── PRINT SETTINGS MODAL ─────────────────────────────── */}
       {showPrintSettings && (
-        <PrintSettingsModal
-          onClose={() => setShowPrintSettings(false)}
-          printerName={printerName}
-          onPrinterChange={handlePrinterChange}
-          qzStatus={qzStatus}
-        />
+        <PrintSettingsModal onClose={() => setShowPrintSettings(false)} printerName={printerName} onPrinterChange={handlePrinterChange} qzStatus={qzStatus} />
       )}
     </div>
   );

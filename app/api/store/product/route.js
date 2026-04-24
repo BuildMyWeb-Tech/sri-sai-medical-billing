@@ -45,23 +45,73 @@ function validateProductFields(fields) {
 export async function GET(request) {
   try {
     const { storeId } = await resolveStore(request);
-    if (!storeId) return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    if (!storeId) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    }
+
+    // ✅ Get search term from URL
+    const { searchParams } = new URL(request.url);
+    const searchTerm = searchParams.get("search") || "";
+
+    console.log("🔍 Incoming search:", searchTerm);
 
     const products = await prisma.product.findMany({
-      where: { storeId },
+      where: {
+        storeId,
+        OR: [
+          {
+            name: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+          {
+            variants: {
+              some: {
+                barcode: searchTerm,
+              },
+            },
+          },
+        ],
+      },
       include: {
         variants: {
-          select: { id: true, size: true, price: true, stock: true, barcode: true },
-          orderBy: { size: 'asc' },
+          select: {
+            id: true,
+            size: true,
+            price: true,
+            stock: true,
+            barcode: true,
+          },
+          orderBy: { size: "asc" },
         },
-        inventory: { where: { storeId }, select: { quantity: true, lowStock: true } },
+        inventory: {
+          where: { storeId },
+          select: { quantity: true, lowStock: true },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
+
+   // ✅ Debug logs
+console.log("📦 Products found:", products.length);
+
+// Print ALL products (full structure)
+console.log("🧪 All products:", products);
+
+// Optional: cleaner readable format
+products.forEach((p, i) => {
+  console.log(`🔹 Product #${i + 1}`, {
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    variants: p.variants,
+  });
+});
 
     return NextResponse.json({ products });
   } catch (error) {
-    console.error('GET /api/store/product error:', error);
+    console.error("GET /api/store/product error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

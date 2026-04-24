@@ -176,6 +176,7 @@
    📄 favicon.ico
    📄 globals.css
    📄 layout.jsx
+   📄 not-found.jsx
    📄 show-structure.js
    📁 store
       📁 add-product
@@ -303,6 +304,8 @@
       📁 20260408171746_add_product_variants
          📄 migration.sql
       📁 20260419054434_add_employee_id_to_bill_and_sale
+         📄 migration.sql
+      📁 20260422074532_add_paid_amount_to_bill
          📄 migration.sql
       📄 migration_lock.toml
    📄 schema.prisma

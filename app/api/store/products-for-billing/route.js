@@ -1,12 +1,4 @@
 // app/api/store/products-for-billing/route.js
-//
-// ✅ Works for BOTH:
-//    - Store owner (Clerk session via getAuth)
-//    - Employee (JWT token via Authorization header)
-//
-// FIX #9: Search now matches product name, SKU, AND variant barcode
-// Returns products WITH variants (including barcode for scan)
-// Used by: Store Billing, Employee Billing
 
 import prisma from '@/lib/prisma';
 import { getAuth } from '@clerk/nextjs/server';
@@ -14,26 +6,31 @@ import authSeller from '@/middlewares/authSeller';
 import { verifyEmployeeToken } from '@/middlewares/authEmployee';
 import { NextResponse } from 'next/server';
 
+// ─────────────────────────────────────────────
+// Resolve storeId (STORE + EMPLOYEE)
+// ─────────────────────────────────────────────
 async function resolveStoreId(request) {
-  // ── 1. Try employee JWT first (Authorization: Bearer <empToken>) ──
-  const authHeader = request.headers.get('authorization') || '';
-  if (authHeader.startsWith('Bearer ')) {
+  try {
     const emp = verifyEmployeeToken(request);
     if (emp?.storeId) {
       return { storeId: emp.storeId, role: 'EMPLOYEE' };
     }
-  }
+  } catch (_) {}
 
-  // ── 2. Fall back to Clerk session (store owner) ──
-  const { userId } = getAuth(request);
-  if (userId) {
-    const storeId = await authSeller(userId);
-    if (storeId) return { storeId, role: 'STORE' };
-  }
+  try {
+    const { userId } = getAuth(request);
+    if (userId) {
+      const storeId = await authSeller(userId);
+      if (storeId) return { storeId, role: 'STORE' };
+    }
+  } catch (_) {}
 
   return { storeId: null, role: null };
 }
 
+// ─────────────────────────────────────────────
+// GET PRODUCTS FOR BILLING
+// ─────────────────────────────────────────────
 export async function GET(request) {
   try {
     const { storeId, role } = await resolveStoreId(request);
@@ -43,38 +40,75 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search');
+    const search = searchParams.get('search')?.trim() || '';
     const limit = Math.min(500, parseInt(searchParams.get('limit') || '200'));
 
-    // ── FIX #9: Build where clause — search name, SKU, AND variant barcode ──
+    // ⚡ STEP 1: FAST BARCODE MATCH (FOR SCANNER)
+    if (search) {
+      const exactVariant = await prisma.productVariant.findFirst({
+        where: {
+          barcode: search,
+          product: {
+            storeId,
+          },
+        },
+        include: {
+          product: true,
+        },
+      });
+
+      if (exactVariant) {
+        return NextResponse.json({
+          role,
+          products: [
+            {
+              id: exactVariant.product.id,
+              name: exactVariant.product.name,
+              sku: exactVariant.product.sku,
+              variants: [
+                {
+                  id: exactVariant.id,
+                  size: exactVariant.size,
+                  price: exactVariant.price,
+                  stock: exactVariant.stock,
+                  barcode: exactVariant.barcode,
+                  productId: exactVariant.productId,
+                },
+              ],
+            },
+          ],
+          type: 'BARCODE_MATCH',
+        });
+      }
+    }
+
+    // ⚡ STEP 2: NORMAL SEARCH (NAME / SKU / BARCODE PARTIAL)
     let where = { storeId };
 
     if (search) {
-      const q = search.trim();
       where = {
         storeId,
         OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { sku: { contains: q, mode: 'insensitive' } },
-          // ── FIX #9: match variant barcode ────────────────────────
-          { variants: { some: { barcode: { contains: q, mode: 'insensitive' } } } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { sku: { contains: search, mode: 'insensitive' } },
+          {
+            variants: {
+              some: {
+                barcode: { contains: search },
+              },
+            },
+          },
         ],
       };
     }
 
+    // ⚡ STEP 3: FETCH PRODUCTS
     const products = await prisma.product.findMany({
       where,
       select: {
         id: true,
         name: true,
-        mrp: true,
-        price: true,
-        images: true,
-        category: true,
-        quantity: true,
-        inStock: true,
         sku: true,
-        // ← Include variants WITH barcode (needed for barcode scan)
         variants: {
           select: {
             id: true,
@@ -91,9 +125,20 @@ export async function GET(request) {
       take: limit,
     });
 
-    return NextResponse.json({ products, role });
+    // ⚡ STEP 4: REMOVE EMPTY VARIANT PRODUCTS (IMPORTANT)
+    const filteredProducts = products.filter(p => p.variants.length > 0);
+
+    return NextResponse.json({
+      role,
+      products: filteredProducts,
+      type: 'SEARCH_RESULT',
+    });
+
   } catch (error) {
-    console.error('GET /api/store/products-for-billing error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('❌ products-for-billing error:', error);
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }

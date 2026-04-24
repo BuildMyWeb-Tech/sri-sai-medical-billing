@@ -1,21 +1,4 @@
 'use client';
-/**
- * /app/store/billing/page.jsx
- *
- * CHANGES vs previous version:
- * ─────────────────────────────────────────────────────────────
- * ✅ FEATURE #6 — Cash Change
- *    • paidAmount state added
- *    • changeAmount computed in useMemo (alongside grandTotal)
- *    • "Customer Paid" input shown when paymentMode === 'CASH'
- *    • Change return displayed live below the input
- *    • paidAmount + changeAmount included in billData → synced to DB
- *    • Print receipt (ESC/POS + HTML) shows Paid / Change rows
- *    • clearCart now also resets paidAmount
- * ─────────────────────────────────────────────────────────────
- * All other features (variants, offline-first sync, QZ Tray,
- * history, size picker, duplicate modal) are unchanged.
- */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -28,20 +11,19 @@ import {
 } from 'lucide-react';
 import { calculateTax, formatCurrency } from '@/lib/storeSettings';
 import {
-  searchProducts as localSearch,
+  initProductCache,
+  searchProducts,
   findVariantByBarcode as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
 
 // ─── localStorage / IndexedDB keys ───────────────────────────────────────────
-const LS_PRODUCTS      = 'store_pos_products_cache';
-const LS_PRODUCTS_TS   = 'store_pos_products_cache_ts';
 const LS_PRINTER_NAME  = 'store_pos_printer_name';
-const PRODUCT_CACHE_TTL = 10 * 60 * 1000;
 
 const DB_NAME    = 'store_pos_billing_db';
 const DB_VERSION = 2;
 const STORE_LOCAL = 'bills_local';
 const STORE_QUEUE = 'bills_queue';
+const STORE_ID = 'default'; // or dynamic store id
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 function openDB() {
@@ -98,20 +80,6 @@ async function idbCount(store) {
 }
 
 // ─── Product cache (localStorage) ────────────────────────────────────────────
-function saveProductsToCache(products) {
-  try {
-    localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
-    localStorage.setItem(LS_PRODUCTS_TS, String(Date.now()));
-  } catch (_) {}
-}
-function getProductsFromCache() {
-  try {
-    const ts = Number(localStorage.getItem(LS_PRODUCTS_TS) || 0);
-    if (Date.now() - ts > PRODUCT_CACHE_TTL) return null;
-    const raw = localStorage.getItem(LS_PRODUCTS);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
 function getStoreToken() {
   try {
     return localStorage.getItem('storeToken') || localStorage.getItem('token') || '';
@@ -398,7 +366,8 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
         const idx = activeIdx >= 0 ? activeIdx : 0;
         if (searchResults[idx]) { onSelectProduct(searchResults[idx]); setValue(''); setShowDropdown(false); return; }
       }
-      onScan(v); setValue(''); setShowDropdown(false);
+      onScan(v.replace(/\s+/g, ''));
+      setValue(''); setShowDropdown(false);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1));
     } else if (e.key === 'ArrowUp') {
@@ -592,7 +561,6 @@ export default function StoreBillingPage() {
   const [sizePickerModal, setSizePickerModal] = useState(null);
   const [editingQty, setEditingQty]           = useState(null);
   const [isFullscreen, setIsFullscreen]       = useState(false);
-  const [localProducts, setLocalProducts]     = useState([]);
   const [lastScanFeedback, setLastScanFeedback] = useState(null);
 
   // Print
@@ -640,43 +608,84 @@ export default function StoreBillingPage() {
   }, []);
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const token = getStoreToken();
-    fetch('/api/store/settings', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
+  // ── Init ──────────────────────────────────────────────────────────────────
+useEffect(() => {
+  const init = async () => {
+    try {
+      const token = getStoreToken();
 
-    const onOnline  = () => { setIsOnline(true); triggerSync(); refreshProductCache(); };
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    setIsOnline(navigator.onLine);
+      // ✅ Load settings
+      fetch('/api/store/settings', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => setSettings(d.settings || null))
+        .catch(console.error);
 
-    refreshQueueCount();
-    idbGetAll(STORE_LOCAL).then((b) => setLocalBills(b.sort((a, b2) => b2.createdAt - a.createdAt)));
-    idbGetAll(STORE_QUEUE).then((q) => setQueueBillIds(new Set(q.map((b) => b.localId))));
+      // ✅ Initialize product cache (NEW SYSTEM)
+      await initProductCache({
+        storeId: STORE_ID,
+        token,
+        onRefresh: () => {
+          console.log('🔄 Products refreshed in background');
+        },
+      });
 
-    const onFS = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFS);
+      console.log('✅ Product cache initialized');
+    } catch (err) {
+      console.error('Init failed:', err);
+    }
+  };
 
-    const cached = getProductsFromCache();
-    if (cached) setLocalProducts(cached);
-    if (navigator.onLine) refreshProductCache();
+  init();
 
-    const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
-    setPrinterName(savedPrinter);
-    initQZConnection();
+  // ✅ Online / Offline
+  const onOnline = () => {
+    setIsOnline(true);
+    triggerSync();
+    // ❌ removed refreshProductCache()
+  };
 
-    const bgSync = setInterval(() => { if (navigator.onLine) runSync(); }, 15000);
+  const onOffline = () => setIsOnline(false);
 
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-      document.removeEventListener('fullscreenchange', onFS);
-      clearTimeout(syncTimerRef.current);
-      clearTimeout(feedbackTimer.current);
-      clearInterval(bgSync);
-    };
-  }, []); // eslint-disable-line
+  window.addEventListener('online', onOnline);
+  window.addEventListener('offline', onOffline);
+  setIsOnline(navigator.onLine);
+
+  // ✅ Load local DB
+  refreshQueueCount();
+
+  idbGetAll(STORE_LOCAL).then((b) =>
+    setLocalBills(b.sort((a, b2) => b2.createdAt - a.createdAt))
+  );
+
+  idbGetAll(STORE_QUEUE).then((q) =>
+    setQueueBillIds(new Set(q.map((b) => b.localId)))
+  );
+
+  // ✅ Fullscreen listener
+  const onFS = () => setIsFullscreen(!!document.fullscreenElement);
+  document.addEventListener('fullscreenchange', onFS);
+
+  // ✅ Printer
+  const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
+  setPrinterName(savedPrinter);
+  initQZConnection();
+
+  // ✅ Background sync
+  const bgSync = setInterval(() => {
+    if (navigator.onLine) runSync();
+  }, 15000);
+
+  return () => {
+    window.removeEventListener('online', onOnline);
+    window.removeEventListener('offline', onOffline);
+    document.removeEventListener('fullscreenchange', onFS);
+    clearTimeout(syncTimerRef.current);
+    clearTimeout(feedbackTimer.current);
+    clearInterval(bgSync);
+  };
+}, []); // eslint-disable-line
 
   const initQZConnection = async () => {
     setQzStatus('connecting');
@@ -704,23 +713,11 @@ export default function StoreBillingPage() {
     return () => clearTimeout(historyTimer.current);
   }, [historySearch]); // eslint-disable-line
 
-  // ── Product cache ─────────────────────────────────────────────────────────
-  const refreshProductCache = async () => {
-    try {
-      const token = getStoreToken();
-      const res  = await fetch('/api/store/products-for-billing', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const data = await res.json();
-      const products = data.products || [];
-      setLocalProducts(products);
-      saveProductsToCache(products);
-    } catch (e) { console.warn('Product cache refresh failed:', e); }
-  };
-
   // ── Search — local only ───────────────────────────────────────────────────
   const handleSearch = useCallback((query) => {
     const q = query.trim();
     if (!q) { setSuggestions([]); return; }
-    setSuggestions(localSearch(q, 8));
+    setSuggestions(searchProducts(q, 8));
   }, []);
 
   // ── History ───────────────────────────────────────────────────────────────
@@ -756,27 +753,61 @@ export default function StoreBillingPage() {
     itemDiscount: 0, total: variant.price, stock: variant.stock,
   });
 
-  const addVariantToCart = useCallback((product, variant) => {
-    const existingIdx = cartItems.findIndex((i) => i.variantId === variant.id);
-    if (existingIdx >= 0) { setDuplicateModal({ product, variant, existingIdx }); return; }
-    if (variant.stock === 0) { showScanFeedback('error', `Out of stock: ${product.name} (${variant.size})`); return; }
-    setCartItems((prev) => [...prev, buildCartItem(product, variant)]);
-    showScanFeedback('success', `✓ ${product.name} (${variant.size})`);
-  }, [cartItems, showScanFeedback]); // eslint-disable-line
+ const addVariantToCart = useCallback((product, variant) => {
+  // 🚨 guard: prevent crash
+  if (!product || !variant) {
+    console.warn('Invalid product/variant:', product, variant);
+    showScanFeedback('error', 'Invalid product selection');
+    return;
+  }
+
+  setCartItems(prev => {
+    const existingIdx = prev.findIndex(i => i.variantId === variant.id);
+
+    if (existingIdx >= 0) {
+      setDuplicateModal({ product, variant, existingIdx });
+      return prev;
+    }
+
+    // 🚨 safe stock check
+    if ((variant.stock ?? 0) === 0) {
+      showScanFeedback(
+        'error',
+        `Out of stock: ${product.name} (${variant.size || ''})`
+      );
+      return prev;
+    }
+
+    showScanFeedback(
+      'success',
+      `✓ ${product.name} (${variant.size || ''})`
+    );
+
+    return [...prev, buildCartItem(product, variant)];
+  });
+}, [showScanFeedback]);
 
   const handleBarcodeScanned = useCallback((barcode) => {
-    const found = findByBarcodeLocal(barcode);
-    if (!found) { showScanFeedback('error', `Unknown barcode: ${barcode}`); return; }
-    addVariantToCart(found.product, found.variant);
-  }, [addVariantToCart, showScanFeedback]);
+  const found = findByBarcodeLocal(barcode); // ✅ correct function
+
+  if (!found || !found.product || !found.variant) {
+    showScanFeedback('error', `Unknown barcode: ${barcode}`);
+    return;
+  }
+
+  addVariantToCart(found.product, found.variant);
+}, [addVariantToCart, showScanFeedback]);
 
   const handleProductSelectedFromSearch = (product) => {
-    setSuggestions([]);
-    if (!product.variants || product.variants.length === 0) {
-      showScanFeedback('error', 'No variants found for this product'); return;
-    }
-    setSizePickerModal(product);
-  };
+  setSuggestions([]);
+
+  if (!product?.variants || product.variants.length === 0) {
+    showScanFeedback('error', 'No variants found for this product');
+    return;
+  }
+
+  setSizePickerModal(product);
+};
 
   const handleDuplicateIncreaseQty = () => {
     if (!duplicateModal) return;
@@ -967,11 +998,11 @@ export default function StoreBillingPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isOnline && (
+          {/* {!isOnline && (
             <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-semibold border border-orange-200">
               ⚡ Offline — {localProducts.length} cached
             </span>
-          )}
+          )} */}
           <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${qzIndicator.dot}`} />
             {qzIndicator.label} <Settings size={11} />
@@ -1393,11 +1424,26 @@ export default function StoreBillingPage() {
       )}
 
       {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
-      {sizePickerModal && (
-        <SizePickerModal product={sizePickerModal}
-          onConfirm={(product, variants) => { setSizePickerModal(null); variants.forEach((variant) => addVariantToCart(product, variant)); }}
-          onClose={() => setSizePickerModal(null)} />
-      )}
+      {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
+{sizePickerModal && (
+  <SizePickerModal
+    product={sizePickerModal}
+    onConfirm={(product, variants) => {
+      if (!Array.isArray(variants) || variants.length === 0) return;
+
+      // ✅ Add all selected variants safely
+      variants.forEach((variant) => {
+        if (variant) {
+          addVariantToCart(product, variant);
+        }
+      });
+
+      // ✅ Close AFTER processing
+      setSizePickerModal(null);
+    }}
+    onClose={() => setSizePickerModal(null)}
+  />
+)}
 
       {/* ── PRINT SETTINGS MODAL ─────────────────────────────── */}
       {showPrintSettings && (

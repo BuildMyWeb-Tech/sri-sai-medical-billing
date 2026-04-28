@@ -255,7 +255,7 @@ export default function Dashboard() {
       {/* ── POS Billing Stats (Feature 10) ─────────────────────── */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <Receipt size={14} /> POS Billing
+          <Receipt size={14} /> Billing
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard

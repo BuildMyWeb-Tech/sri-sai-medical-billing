@@ -54,7 +54,7 @@ const StoreNavbar = ({ storeInfo, mobileMenuOpen, setMobileMenuOpen, employee })
         <div className="flex items-center gap-2.5">
           {/* Name + role */}
           <div className="hidden sm:block text-right">
-            <p className="text-sm font-medium text-slate-800">Hi, {displayName.split(' ')[0]}</p>
+            <p className="text-sm font-medium text-slate-800">Hi, {displayName}</p>
             <p className="text-xs text-slate-500">{displayRole}</p>
           </div>
 

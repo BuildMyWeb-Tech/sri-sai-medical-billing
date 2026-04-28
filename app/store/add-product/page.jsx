@@ -693,37 +693,7 @@ export default function AddProductPage() {
                   onChange={(field, value) => updateVariantField(activeVariant.label, field, value)}
                 />
 
-                {/* Summary of all variants */}
-                {variantList.length > 1 && (
-                  <div className="mt-3 pt-3 border-t border-indigo-100">
-                    <p className="text-xs font-semibold text-slate-400 uppercase mb-2">All Variants</p>
-                    <div className="flex flex-wrap gap-2">
-                      {variantList.map((v) => {
-                        const filled = v.barcode && v.price && v.stock !== '';
-                        return (
-                          <div
-                            key={v.label}
-                            onClick={() => setActiveLabel(v.label)}
-                            className={`cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
-                              v.label === activeLabel
-                                ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200'
-                            }`}
-                          >
-                            <span className="font-semibold">{v.label}</span>
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${filled ? 'bg-green-500' : 'bg-amber-400'}`}
-                              title={filled ? 'Complete' : 'Incomplete'}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">
-                      Green = filled · Amber = incomplete · Each barcode must be unique.
-                    </p>
-                  </div>
-                )}
+               
               </div>
             ) : variantList.length === 0 ? (
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-500">

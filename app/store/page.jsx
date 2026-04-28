@@ -298,28 +298,8 @@ export default function Dashboard() {
             icon={Layers}
             color="indigo"
           />
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
-          <div className="bg-green-100 rounded-xl p-3">
-            <IndianRupee size={20} className="text-green-500" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
-            <p className="text-2xl font-bold text-slate-800">
-              ₹{dash.totalEarnings.toLocaleString('en-IN')}
-            </p>
-            <p className="text-xs text-slate-400">All orders combined</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
-          <div className="bg-blue-100 rounded-xl p-3">
-            <TrendingUp size={20} className="text-blue-500" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Delivery Rate</p>
-            <p className="text-2xl font-bold text-slate-800">{conversionRate}%</p>
-            <p className="text-xs text-slate-400">Delivered / Total orders</p>
-          </div>
-        </div>
+          
+       
         </div>
       </div>
 
@@ -369,7 +349,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <h3 className="font-semibold text-slate-800">Trends (Last 14 Days)</h3>
@@ -463,7 +443,7 @@ export default function Dashboard() {
             </>
           )}
         </div>
-      </div>
+      </div> */}
 
       {/* ── Top Variants (Feature 10) ───────────────────────────── */}
       {dash.topVariants && dash.topVariants.length > 0 && (
@@ -562,7 +542,7 @@ export default function Dashboard() {
       )}
 
       {/* Orders by Status Bar Chart */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h3 className="font-semibold text-slate-800 mb-5">Orders by Status</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={barData} margin={{ left: -10 }}>
@@ -577,7 +557,7 @@ export default function Dashboard() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </div>
+      </div> */}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

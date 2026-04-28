@@ -26,6 +26,7 @@ import {
   Tag,
   ShoppingBag,
 } from 'lucide-react';
+import ModalWrapper from '@/components/ui/ModalWrapper';
 
 const ALL_PERMISSIONS = [
   { key: 'billing',            label: 'Billing',             Icon: Receipt },
@@ -385,15 +386,13 @@ export default function EmployeesPage() {
           Create / Edit Modal
       ════════════════════════════════════════════════════════ */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+          <ModalWrapper>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-8 flex flex-col">
 
             {/* ── Modal Header ── */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">
-                  Employee management
-                </p>
+               
                 <h2 className="text-lg font-bold text-slate-800">
                   {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
                 </h2>
@@ -516,15 +515,15 @@ export default function EmployeesPage() {
                 {editingEmployee ? 'Save Changes' : 'Create Employee'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+              </div>
+                </ModalWrapper> )
+      }
 
       {/* ════════════════════════════════════════════════════════
           Delete Confirm Modal
       ════════════════════════════════════════════════════════ */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <ModalWrapper>
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
             <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Trash2 size={26} className="text-red-500" />
@@ -548,8 +547,8 @@ export default function EmployeesPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+    </ModalWrapper>
+)}
     </div>
   );
 }

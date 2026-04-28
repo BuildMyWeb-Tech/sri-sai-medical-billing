@@ -128,7 +128,7 @@ const PAYMENT_MODES = [
   { id: 'CASH',  label: 'Cash',  icon: Banknote   },
   { id: 'CARD',  label: 'Card',  icon: CreditCard  },
   { id: 'UPI',   label: 'UPI',   icon: Smartphone  },
-  { id: 'OTHER', label: 'Other', icon: Receipt      },
+  // { id: 'OTHER', label: 'Other', icon: Receipt      },
 ];
 const PM_COLORS = {
   CASH:  'bg-green-100 text-green-700',
@@ -1008,7 +1008,7 @@ changeAmount: changeAmt,
 
               <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Payment Mode</h3>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   {PAYMENT_MODES.map((pm) => (
                       <button key={pm.id} onClick={() => { setPaymentMode(pm.id); setPaidAmount(''); }}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all text-xs font-medium ${paymentMode === pm.id ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'}`}>
@@ -1057,19 +1057,7 @@ changeAmount: changeAmt,
   </div>
 )}
 
-              {/* <div>
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Note</h3>
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Customer name, phone, or any note…" rows={2}
-                  className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-slate-50 resize-none placeholder:text-slate-400" />
-              </div> */}
-
-              {/* <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border ${qzStatus === 'connected' && printerName ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                <Printer size={13} />
-                {qzStatus === 'connected' && printerName ? <><span className="font-medium">Direct print:</span> {printerName}</> : <><span>Browser print dialog</span><button onClick={() => setShowPrintSettings(true)} className="ml-auto underline hover:text-blue-600">Set printer</button></>}
-              </div> */}
-            </div>
-
-            <div className="p-4 border-t border-slate-200 flex-shrink-0">
+ <div className="p-4 border-t border-slate-200 flex-shrink-0">
               <button onClick={completeBill} disabled={!cartItems.length || loading}
                 className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
                 {loading ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</> : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>}
@@ -1084,6 +1072,19 @@ changeAmount: changeAmt,
                 {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
               </p> */}
             </div>
+              {/* <div>
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Note</h3>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Customer name, phone, or any note…" rows={2}
+                  className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-slate-50 resize-none placeholder:text-slate-400" />
+              </div> */}
+
+              {/* <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border ${qzStatus === 'connected' && printerName ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                <Printer size={13} />
+                {qzStatus === 'connected' && printerName ? <><span className="font-medium">Direct print:</span> {printerName}</> : <><span>Browser print dialog</span><button onClick={() => setShowPrintSettings(true)} className="ml-auto underline hover:text-blue-600">Set printer</button></>}
+              </div> */}
+            </div>
+
+           
           </div>
         </div>
       ) : (

@@ -15,6 +15,7 @@ import {
   searchProducts,
   findVariantByBarcode as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
+import ModalWrapper from '@/components/ui/ModalWrapper';
 
 // ─── localStorage / IndexedDB keys ───────────────────────────────────────────
 const LS_PRINTER_NAME  = 'store_pos_printer_name';
@@ -94,7 +95,7 @@ const PAYMENT_MODES = [
   { id: 'CASH',  label: 'Cash',  icon: Banknote   },
   { id: 'CARD',  label: 'Card',  icon: CreditCard  },
   { id: 'UPI',   label: 'UPI',   icon: Smartphone  },
-  { id: 'OTHER', label: 'Other', icon: Receipt      },
+  // { id: 'OTHER', label: 'Other', icon: Receipt      },
 ];
 const PM_COLORS = {
   CASH:  'bg-green-100 text-green-700',
@@ -420,37 +421,97 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
 
 // ─── Size picker modal ────────────────────────────────────────────────────────
 function SizePickerModal({ product, onConfirm, onClose }) {
-  const variants = product.variants || [];
+  const variants = product?.variants || [];
   const [selected, setSelected] = useState([]);
+
   const toggleVariant = (variant) => {
-    if (variant.stock === 0) return;
-    setSelected((prev) => prev.find((v) => v.id === variant.id) ? prev.filter((v) => v.id !== variant.id) : [...prev, variant]);
+    if (!variant || variant.stock === 0) return;
+
+    setSelected((prev) =>
+      prev.find((v) => v.id === variant.id)
+        ? prev.filter((v) => v.id !== variant.id)
+        : [...prev, variant]
+    );
   };
-  const isSelected = (variant) => selected.some((v) => v.id === variant.id);
+
+  const isSelected = (variant) =>
+    selected.some((v) => v.id === variant.id);
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <ModalWrapper>
       <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+        
+        {/* HEADER */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center"><Layers size={20} className="text-indigo-600" /></div>
-          <div><h3 className="font-bold text-slate-800">Select Size</h3><p className="text-xs text-slate-500 mt-0.5">{product.name}</p></div>
-          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+            <Layers size={20} className="text-indigo-600" />
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800">Select Size</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {product?.name}
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+          >
+            <X size={16} />
+          </button>
         </div>
+
+        {/* VARIANTS */}
         {variants.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-4">No variants found for this product.</p>
+          <p className="text-sm text-slate-400 text-center py-4">
+            No variants found for this product.
+          </p>
         ) : (
           <div className="space-y-2">
             {variants.map((v) => {
-              const isOut = v.stock === 0; const sel = isSelected(v);
+              const isOut = v?.stock === 0;
+              const sel = isSelected(v);
+
               return (
-                <button key={v.id} onClick={() => toggleVariant(v)} disabled={isOut}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${isOut ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' : sel ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200' : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50'}`}>
+                <button
+                  key={v.id}
+                  onClick={() => toggleVariant(v)}
+                  disabled={isOut}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                    isOut
+                      ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                      : sel
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200'
+                      : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50'
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center justify-center w-10 h-8 rounded-lg text-xs font-bold transition-all ${isOut ? 'bg-slate-100 text-slate-300' : sel ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
+                    <span className={`inline-flex items-center justify-center w-10 h-8 rounded-lg text-xs font-bold ${
+                      isOut
+                        ? 'bg-slate-100 text-slate-300'
+                        : sel
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-indigo-100 text-indigo-600'
+                    }`}>
                       {sel ? <CheckCircle size={14} /> : v.size}
                     </span>
-                    <div className="text-left"><span className="font-semibold">{v.size}</span><span className="ml-2 text-indigo-600">₹{Number(v.price).toLocaleString('en-IN')}</span></div>
+
+                    <div className="text-left">
+                      <span className="font-semibold">{v.size}</span>
+                      <span className="ml-2 text-indigo-600">
+                        ₹{Number(v.price).toLocaleString('en-IN')}
+                      </span>
+                    </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOut ? 'bg-red-50 text-red-500' : v.stock < 5 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
+
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    isOut
+                      ? 'bg-red-50 text-red-500'
+                      : v.stock < 5
+                      ? 'bg-amber-50 text-amber-600'
+                      : 'bg-green-50 text-green-600'
+                  }`}>
                     {isOut ? 'Out of stock' : `${v.stock} left`}
                   </span>
                 </button>
@@ -458,15 +519,33 @@ function SizePickerModal({ product, onConfirm, onClose }) {
             })}
           </div>
         )}
+
+        {/* FOOTER */}
         <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2.5 text-slate-500 hover:text-slate-700 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 font-medium">Cancel</button>
-          <button onClick={() => { if (selected.length > 0) onConfirm(product, selected); }} disabled={selected.length === 0}
-            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold transition-all ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
-            {selected.length === 0 ? 'Confirm' : `Confirm (${selected.length} size${selected.length > 1 ? 's' : ''})`}
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 text-slate-500 hover:text-slate-700 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 font-medium"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={() => selected.length > 0 && onConfirm(product, selected)}
+            disabled={selected.length === 0}
+            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold ${
+              selected.length > 0
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            {selected.length === 0
+              ? 'Confirm'
+              : `Confirm (${selected.length})`}
           </button>
         </div>
+
       </div>
-    </div>
+    </ModalWrapper>
   );
 }
 
@@ -993,7 +1072,7 @@ useEffect(() => {
             </button>
             <button onClick={() => setActiveTab('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <History size={12} /> History
-              {localBills.length > 0 && <span className="bg-indigo-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>}
+              {/* {localBills.length > 0 && <span className="bg-indigo-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>} */}
             </button>
           </div>
         </div>
@@ -1114,7 +1193,7 @@ useEffect(() => {
               {/* Payment mode */}
               <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Payment Mode</h3>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   {PAYMENT_MODES.map((pm) => (
                     <button key={pm.id} onClick={() => { setPaymentMode(pm.id); setPaidAmount(''); }}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all text-xs font-medium ${paymentMode === pm.id ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'}`}>
@@ -1165,6 +1244,26 @@ useEffect(() => {
                   )}
                 </div>
               )}
+
+              <div className="p-4 border-t border-slate-200 flex-shrink-0 bg-white">
+              <button onClick={completeBill} disabled={!cartItems.length || loading}
+                className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
+                {loading
+                  ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
+                  : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>
+                }
+              </button>
+              {/* Cash change summary below button */}
+              {paymentMode === 'CASH' && parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
+                <div className="flex items-center justify-between mt-2 px-1">
+                  <span className="text-xs text-slate-500">Paid {fmt(parseFloat(paidAmount))}</span>
+                  <span className="text-xs font-semibold text-green-600">Change {fmt(changeAmount)}</span>
+                </div>
+              )}
+              {/* <p className="text-center text-xs text-slate-400 mt-1.5">
+                {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
+              </p> */}
+            </div>
               {/* ── END CASH CHANGE ─────────────────────────────────────────── */}
 
               {/* Note */}
@@ -1187,20 +1286,20 @@ useEffect(() => {
 
             {/* Complete bill button — always visible, fixed at bottom of right panel */}
             <div className="p-4 border-t border-slate-200 flex-shrink-0 bg-white">
-              <button onClick={completeBill} disabled={!cartItems.length || loading}
+              {/* <button onClick={completeBill} disabled={!cartItems.length || loading}
                 className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
                 {loading
                   ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
                   : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>
                 }
-              </button>
+              </button> */}
               {/* Cash change summary below button */}
-              {paymentMode === 'CASH' && parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
+              {/* {paymentMode === 'CASH' && parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
                 <div className="flex items-center justify-between mt-2 px-1">
                   <span className="text-xs text-slate-500">Paid {fmt(parseFloat(paidAmount))}</span>
                   <span className="text-xs font-semibold text-green-600">Change {fmt(changeAmount)}</span>
                 </div>
-              )}
+              )} */}
               {/* <p className="text-center text-xs text-slate-400 mt-1.5">
                 {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
               </p> */}

@@ -253,7 +253,7 @@ export default function EmployeeManageProductPage() {
   const displayed = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.description.toLowerCase().includes(search.toLowerCase())
+      (p.description || '').toLowerCase().includes(search.toLowerCase())
   );
 
   if (!pageReady && loading) {

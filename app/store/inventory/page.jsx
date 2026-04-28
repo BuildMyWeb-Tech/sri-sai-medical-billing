@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import axios from 'axios';
 import { useAuth } from '@clerk/nextjs';
 import Image from 'next/image';
+import useSWR from 'swr';
 import {
   Package,
   AlertTriangle,
@@ -54,12 +55,16 @@ function EditableThreshold({ inv, onUpdated }) {
   }, [editing]);
 
   const cancel = () => {
-    setLowStock(inv.lowStock); // restore original
+    setLowStock(inv.lowStock);
     setEditing(false);
   };
 
   const save = async () => {
-    if (lowStock === inv.lowStock) { setEditing(false); return; }
+    if (lowStock === inv.lowStock) {
+      setEditing(false);
+      return;
+    }
+
     try {
       setSaving(true);
       const token = await getToken();
@@ -105,6 +110,7 @@ function EditableThreshold({ inv, onUpdated }) {
         }}
         className="w-20 h-7 text-center text-sm border border-amber-300 rounded-md ring-2 ring-amber-100 outline-none"
       />
+
       <button
         onClick={save}
         disabled={saving}
@@ -113,6 +119,7 @@ function EditableThreshold({ inv, onUpdated }) {
         {saving ? <Loader2 size={10} className="animate-spin" /> : null}
         Save
       </button>
+
       <button
         onClick={cancel}
         className="px-3 py-1 text-slate-500 text-xs border border-slate-200 rounded-md hover:bg-slate-50"
@@ -127,38 +134,47 @@ function EditableThreshold({ inv, onUpdated }) {
 export default function StoreInventoryPage() {
   const { getToken } = useAuth();
   const [inventory, setInventory] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // all | low | out
+  const [filter, setFilter] = useState('all');
 
-  const fetchInventory = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = await getToken();
-      const { data } = await axios.get('/api/inventory', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setInventory(data.inventory || []);
-    } catch {
-      toast.error('Failed to load inventory');
-    } finally {
-      setLoading(false);
-    }
+  // ---- NEW SWR FETCHER ----
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    const { data } = await axios.get('/api/inventory', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return data.inventory || [];
   }, [getToken]);
 
+  const { data, error, isLoading, mutate } = useSWR('store-inventory', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30000,
+  });
+
+  // Sync SWR → state
   useEffect(() => {
-    fetchInventory();
-  }, [fetchInventory]);
+    if (data) setInventory(data);
+  }, [data]);
 
-  const handleUpdated = useCallback((productId, newLowStock) => {
-    setInventory((prev) =>
-      prev.map((inv) =>
-        inv.productId === productId ? { ...inv, lowStock: newLowStock } : inv
-      )
-    );
-  }, []);
+  const loading = isLoading;
 
-  // ── Filtered + searched list ──────────────────────────────────
+  // Refresh button triggers revalidation
+  const fetchInventory = useCallback(() => {
+    mutate();
+  }, [mutate]);
+
+  // ---- UPDATED handleUpdated with mutate() ----
+  const handleUpdated = useCallback(
+    (productId, newLowStock) => {
+      setInventory((prev) =>
+        prev.map((inv) => (inv.productId === productId ? { ...inv, lowStock: newLowStock } : inv))
+      );
+      mutate(); // refresh cache after update
+    },
+    [mutate]
+  );
+
+  // Filter + search
   const displayed = inventory.filter((inv) => {
     const name = inv.product?.name?.toLowerCase() || '';
     const matchSearch = name.includes(search.toLowerCase());
@@ -168,7 +184,6 @@ export default function StoreInventoryPage() {
     return true;
   });
 
-  // ── Summary counts ────────────────────────────────────────────
   const outCount = inventory.filter((i) => i.quantity === 0).length;
   const lowCount = inventory.filter((i) => i.quantity > 0 && i.quantity < i.lowStock).length;
   const okCount = inventory.filter((i) => i.quantity >= i.lowStock).length;
@@ -185,6 +200,7 @@ export default function StoreInventoryPage() {
             </h1>
             <p className="text-slate-500 mt-1 text-sm">Manage stock levels for your products</p>
           </div>
+
           <button
             onClick={fetchInventory}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-white transition-colors"
@@ -222,6 +238,7 @@ export default function StoreInventoryPage() {
               className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
             />
           </div>
+
           <div className="flex gap-2">
             {[
               { key: 'all', label: 'All' },
@@ -271,6 +288,7 @@ export default function StoreInventoryPage() {
                     </th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {displayed.map((inv, idx) => (
                     <tr
@@ -283,43 +301,28 @@ export default function StoreInventoryPage() {
                             : ''
                       } ${idx === displayed.length - 1 ? 'border-b-0' : ''}`}
                     >
-                      {/* Product */}
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          {/* {inv.product?.images?.[0] && (
-                            <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-slate-100 flex-shrink-0">
-                              <Image
-                                src={inv.product.images[0]}
-                                alt={inv.product.name}
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                          )} */}
                           <span className="font-medium text-slate-800 line-clamp-1 max-w-[160px]">
                             {inv.product?.name}
                           </span>
                         </div>
                       </td>
 
-                      {/* Stock Qty — READ ONLY */}
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold text-sm tabular-nums">
                           {inv.quantity}
                         </span>
                       </td>
 
-                      {/* Low Threshold — EDITABLE */}
                       <td className="px-5 py-4 hidden sm:table-cell">
                         <EditableThreshold inv={inv} onUpdated={handleUpdated} />
                       </td>
 
-                      {/* Status Badge */}
                       <td className="px-5 py-4">
                         <StockBadge quantity={inv.quantity} lowStock={inv.lowStock} />
                       </td>
 
-                      {/* Last Updated */}
                       <td className="px-5 py-4 hidden md:table-cell text-slate-400 text-xs">
                         {new Date(inv.updatedAt).toLocaleDateString('en-IN', {
                           day: '2-digit',

@@ -378,8 +378,22 @@ export default function ManageProductPage() {
     }
   };
 
+  // ADD this new useEffect after the existing fetchProducts useEffect in ManageProductPage:
   useEffect(() => {
-    fetchProducts();
+    const fetchSettings = async () => {
+      try {
+        const token = await getToken();
+        const { data } = await axios.get('/api/store/settings', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (data.settings?.defaultLowStock) {
+          setLowStockThreshold(data.settings.defaultLowStock);
+        }
+      } catch {
+        // keep default of 5
+      }
+    };
+    fetchSettings();
   }, []);
 
   const handleVariantUpdate = useCallback((productId, updatedVariant) => {

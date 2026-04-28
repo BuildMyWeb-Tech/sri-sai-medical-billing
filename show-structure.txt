@@ -1,7 +1,11 @@
+📁 .clerk
+   📁 .tmp
+      📄 keyless.json
+      📄 README.md
+      📄 telemetry.json
 📄 .env
 📄 .env.example
 📄 .gitignore
-📁 .idea
 📁 app
    📁 (public)
       📁 about
@@ -249,6 +253,8 @@
       📄 StoreSidebar.jsx
       📄 SyncStatusBadge.jsx
    📄 Title.jsx
+   📁 ui
+      📄 ModalWrapper.jsx
 📁 configs
    📄 imageKit.js
    📄 openai.js

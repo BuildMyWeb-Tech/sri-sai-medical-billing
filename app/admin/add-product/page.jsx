@@ -290,8 +290,8 @@ export default function AdminAddProductPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (productInfo.selectedCategories.length === 0) {
-      toast.error('Please select at least one category');
+    if (variantList.length === 0) {
+      toast.error('Please add at least one size / variant');
       return;
     }
     if (!validateVariants()) return;

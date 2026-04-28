@@ -129,24 +129,23 @@ export async function GET(request) {
 // Full create/update
 // quantity + lowStock
 // ─────────────────────────────────────────────
+
 export async function POST(request) {
   try {
     const { storeId, error } = await resolveStoreId(request);
 
     if (!storeId) {
-      return NextResponse.json(
-        { error: error || 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 });
     }
 
-    const { productId, quantity, lowStock } = await request.json();
+    const { productId, lowStock } = await request.json();
 
     if (!productId) {
-      return NextResponse.json(
-        { error: 'productId required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'productId required' }, { status: 400 });
+    }
+
+    if (lowStock === undefined || lowStock === null) {
+      return NextResponse.json({ error: 'lowStock required' }, { status: 400 });
     }
 
     const product = await prisma.product.findFirst({
@@ -154,44 +153,27 @@ export async function POST(request) {
     });
 
     if (!product) {
-      return NextResponse.json(
-        { error: 'Product not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    const newQty = Math.max(0, Number(quantity) || 0);
-    const threshold =
-      lowStock !== undefined ? Math.max(1, Number(lowStock)) : 10;
-
-    const [inventory] = await prisma.$transaction([
-      prisma.inventory.upsert({
-        where: {
-          productId_storeId: { productId, storeId },
-        },
-        update: {
-          quantity: newQty,
-          lowStock: threshold,
-        },
-        create: {
-          productId,
-          storeId,
-          quantity: newQty,
-          lowStock: threshold,
-        },
-      }),
-
-      prisma.product.update({
-        where: { id: productId },
-        data: {
-          quantity: newQty,
-          inStock: newQty > 0,
-        },
-      }),
-    ]);
+    // Threshold-only update — NEVER overwrites quantity
+    const inventory = await prisma.inventory.upsert({
+      where: {
+        productId_storeId: { productId, storeId },
+      },
+      update: {
+        lowStock: Math.max(1, Number(lowStock)),
+      },
+      create: {
+        productId,
+        storeId,
+        quantity: product.quantity || 0,
+        lowStock: Math.max(1, Number(lowStock)),
+      },
+    });
 
     return NextResponse.json({
-      message: 'Inventory saved',
+      message: 'Threshold updated',
       inventory,
     });
   } catch (error) {

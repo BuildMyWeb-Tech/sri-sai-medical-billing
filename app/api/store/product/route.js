@@ -1,10 +1,4 @@
 // app/api/store/product/route.js
-//
-// FIX #2: category is optional — allow empty []
-// FIX #3: dynamic validation message shows exact missing fields
-// FIX #4: CRITICAL — auto-create Inventory row after product creation (inside transaction)
-// FIX #7: images, description, mrp, keyFeatures all optional
-// FIX #8: variants always expected (but product can still save without them)
 
 import prisma from '@/lib/prisma';
 import authSeller from '@/middlewares/authSeller';
@@ -15,45 +9,63 @@ import { NextResponse } from 'next/server';
 
 // ── Resolve store context ─────────────────────────────────────────
 async function resolveStore(request) {
-  // Try employee JWT first
   const authHeader = request.headers.get('authorization') || '';
+
   if (authHeader.startsWith('Bearer ')) {
     const emp = verifyEmployeeToken(request);
-    if (emp?.storeId) return { storeId: emp.storeId, role: 'EMPLOYEE', employeeId: emp.id };
+    if (emp?.storeId) {
+      return {
+        storeId: emp.storeId,
+        role: 'EMPLOYEE',
+        employeeId: emp.id,
+      };
+    }
   }
 
-  // Fall back to Clerk session
   const { userId } = getAuth(request);
+
   if (userId) {
     const storeId = await authSeller(userId);
-    if (storeId) return { storeId, role: 'STORE', employeeId: null };
+    if (storeId) {
+      return {
+        storeId,
+        role: 'STORE',
+        employeeId: null,
+      };
+    }
   }
 
-  return { storeId: null, role: null, employeeId: null };
+  return {
+    storeId: null,
+    role: null,
+    employeeId: null,
+  };
 }
 
-// ── FIX #3: Dynamic validation — returns exact missing field names ─
+// ── REPLACED VALIDATION ───────────────────────────────────────────
 function validateProductFields(fields) {
   const missing = [];
+
   if (!fields.name) missing.push('Name');
-  if (!fields.price || Number(fields.price) <= 0) missing.push('Price');
-  // mrp, description, images, category → all OPTIONAL
+
+  if (!fields.variants || fields.variants.length === 0) {
+    missing.push('At least one variant');
+  }
+
   return missing;
 }
 
-// ── GET: List store products ──────────────────────────────────────
+// ── GET ───────────────────────────────────────────────────────────
 export async function GET(request) {
   try {
     const { storeId } = await resolveStore(request);
+
     if (!storeId) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
     }
 
-    // ✅ Get search term from URL
     const { searchParams } = new URL(request.url);
-    const searchTerm = searchParams.get("search") || "";
-
-    console.log("🔍 Incoming search:", searchTerm);
+    const searchTerm = searchParams.get('search') || '';
 
     const products = await prisma.product.findMany({
       where: {
@@ -62,7 +74,7 @@ export async function GET(request) {
           {
             name: {
               contains: searchTerm,
-              mode: "insensitive",
+              mode: 'insensitive',
             },
           },
           {
@@ -83,67 +95,49 @@ export async function GET(request) {
             stock: true,
             barcode: true,
           },
-          orderBy: { size: "asc" },
+          orderBy: { size: 'asc' },
         },
         inventory: {
           where: { storeId },
-          select: { quantity: true, lowStock: true },
+          select: {
+            quantity: true,
+            lowStock: true,
+          },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
-
-   // ✅ Debug logs
-console.log("📦 Products found:", products.length);
-
-// Print ALL products (full structure)
-console.log("🧪 All products:", products);
-
-// Optional: cleaner readable format
-products.forEach((p, i) => {
-  console.log(`🔹 Product #${i + 1}`, {
-    id: p.id,
-    name: p.name,
-    sku: p.sku,
-    variants: p.variants,
-  });
-});
 
     return NextResponse.json({ products });
   } catch (error) {
-    console.error("GET /api/store/product error:", error);
+    console.error('GET /api/store/product error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// ── POST: Store creates a product ─────────────────────────────────
-// FIX #4: CRITICAL — auto-create Inventory row inside transaction
+// ── POST ──────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
-    const { storeId, employeeId } = await resolveStore(request);
-    if (!storeId) return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    const { storeId } = await resolveStore(request);
+
+    if (!storeId) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    }
 
     const formData = await request.formData();
+
     const name = formData.get('name')?.trim();
     const description = formData.get('description')?.trim() || '';
     const mrp = formData.get('mrp') ? Number(formData.get('mrp')) : 0;
-    const price = Number(formData.get('price') || 0);
+
     const categoryRaw = formData.get('category');
     const keyFeaturesRaw = formData.get('keyFeatures');
     const variantsRaw = formData.get('variants');
+
     const images = formData.getAll('images').filter((f) => f && f.size > 0);
 
-    // ── FIX #3: Dynamic validation ────────────────────────────────
-    const missing = validateProductFields({ name, price });
-    if (missing.length > 0) {
-      return NextResponse.json(
-        { error: `Missing fields: ${missing.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    // ── FIX #2: category is optional — allow empty [] ─────────────
     let category = [];
+
     if (categoryRaw) {
       try {
         const parsed = JSON.parse(categoryRaw);
@@ -153,11 +147,12 @@ export async function POST(request) {
       }
     }
 
-    // ── FIX #7: keyFeatures optional ─────────────────────────────
     let keyFeatures = [];
+
     if (keyFeaturesRaw) {
       try {
         const parsed = JSON.parse(keyFeaturesRaw);
+
         if (Array.isArray(parsed)) {
           keyFeatures = parsed.filter((f) => typeof f === 'string' && f.trim() !== '');
         }
@@ -166,8 +161,8 @@ export async function POST(request) {
       }
     }
 
-    // ── FIX #8: parse variants ────────────────────────────────────
     let variants = [];
+
     if (variantsRaw) {
       try {
         const parsed = JSON.parse(variantsRaw);
@@ -177,17 +172,29 @@ export async function POST(request) {
       }
     }
 
-    // ── FIX #7: images optional — upload only if provided ─────────
+    // ── REPLACED VALIDATION CALL ────────────────────────────────
+    const missing = validateProductFields({
+      name,
+      variants,
+    });
+
+    if (missing.length > 0) {
+      return NextResponse.json({ error: `Missing: ${missing.join(', ')}` }, { status: 400 });
+    }
+
     let imagesUrl = [];
+
     if (images.length > 0) {
       imagesUrl = await Promise.all(
         images.map(async (image) => {
           const buffer = Buffer.from(await image.arrayBuffer());
+
           const response = await imagekit.upload({
             file: buffer,
             fileName: image.name,
             folder: 'products',
           });
+
           return imagekit.url({
             path: response.filePath,
             transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '1024' }],
@@ -196,18 +203,15 @@ export async function POST(request) {
       );
     }
 
-    // ── FIX #4: CRITICAL — use transaction to create product + inventory ──
     const result = await prisma.$transaction(async (tx) => {
-      // Compute total quantity from variants
       const totalQty = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
 
-      // Create the product
+      // ── REPLACED CREATE DATA (price removed) ──────────────────
       const product = await tx.product.create({
         data: {
           name,
           description,
           mrp,
-          price,
           quantity: totalQty,
           category,
           keyFeatures,
@@ -218,7 +222,6 @@ export async function POST(request) {
         },
       });
 
-      // FIX #8: Create variants with barcode/price/stock
       if (variants.length > 0) {
         await tx.productVariant.createMany({
           data: variants.map((v) => ({
@@ -231,11 +234,16 @@ export async function POST(request) {
         });
       }
 
-      // ── FIX #4: AUTO-CREATE Inventory row ─────────────────────
-      // This is the critical fix — without this, Inventory page is empty
       await tx.inventory.upsert({
-        where: { productId_storeId: { productId: product.id, storeId } },
-        update: { quantity: totalQty },
+        where: {
+          productId_storeId: {
+            productId: product.id,
+            storeId,
+          },
+        },
+        update: {
+          quantity: totalQty,
+        },
         create: {
           productId: product.id,
           storeId,
@@ -247,75 +255,93 @@ export async function POST(request) {
       return product;
     });
 
-    return NextResponse.json({ message: 'Product created successfully', product: result });
+    return NextResponse.json({
+      message: 'Product created successfully',
+      product: result,
+    });
   } catch (error) {
     console.error('POST /api/store/product error:', error);
-    // Handle unique constraint on barcode
+
     if (error.code === 'P2002' && error.meta?.target?.includes('barcode')) {
       return NextResponse.json(
-        { error: 'One or more barcodes are already in use. Each barcode must be unique.' },
+        {
+          error: 'One or more barcodes are already in use. Each barcode must be unique.',
+        },
         { status: 400 }
       );
     }
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// ── PUT: Update store product ─────────────────────────────────────
-// FIX #2: category optional
-// FIX #3: dynamic validation
-// FIX #4: inventory upsert in transaction
+// ── PUT ───────────────────────────────────────────────────────────
 export async function PUT(request) {
   try {
     const { storeId } = await resolveStore(request);
-    if (!storeId) return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+
+    if (!storeId) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('id');
-    if (!productId) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+
+    if (!productId) {
+      return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+    }
 
     const existing = await prisma.product.findUnique({
       where: { id: productId },
       include: { variants: true },
     });
-    if (!existing) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
     if (existing.storeId !== storeId) {
       return NextResponse.json({ error: 'You can only edit your own products' }, { status: 403 });
     }
 
     const body = await request.json();
-    const { name, description, mrp, price, category, existingImages, keyFeatures, variants } = body;
 
-    // ── FIX #3: Dynamic validation ────────────────────────────────
-    const missing = validateProductFields({ name, price });
+    // ── REPLACED BODY + VALIDATION ──────────────────────────────
+    const { name, description, mrp, category, existingImages, keyFeatures, variants } = body;
+
+    const variantList = Array.isArray(variants) ? variants : [];
+
+    const missing = validateProductFields({
+      name,
+      variants: variantList,
+    });
+
     if (missing.length > 0) {
-      return NextResponse.json(
-        { error: `Missing fields: ${missing.join(', ')}` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: `Missing: ${missing.join(', ')}` }, { status: 400 });
     }
 
     const cleanCategory = Array.isArray(category) ? category : [];
+
     const images =
       Array.isArray(existingImages) && existingImages.length > 0 ? existingImages : existing.images;
+
     const cleanKeyFeatures = Array.isArray(keyFeatures)
       ? keyFeatures.filter((f) => typeof f === 'string' && f.trim() !== '')
       : existing.keyFeatures || [];
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Compute new quantity from variants if provided
-      const variantList = Array.isArray(variants) ? variants : [];
-      const totalQty = variantList.length > 0
-        ? variantList.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-        : existing.quantity;
+      const totalQty =
+        variantList.length > 0
+          ? variantList.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+          : existing.quantity;
 
+      // ── REPLACED UPDATE DATA (price removed) ──────────────────
       const prod = await tx.product.update({
         where: { id: productId },
         data: {
           name,
           description: description || '',
           mrp: Number(mrp) || 0,
-          price: Number(price),
           quantity: totalQty,
           category: cleanCategory,
           keyFeatures: cleanKeyFeatures,
@@ -324,20 +350,23 @@ export async function PUT(request) {
         },
       });
 
-      // Update variants if provided
       if (variantList.length > 0) {
         const existingVariantIds = existing.variants.map((v) => v.id);
+
         const incomingWithId = variantList.filter((v) => v.id);
+
         const incomingNew = variantList.filter((v) => !v.id);
 
-        // Delete variants no longer in list
         const keepIds = incomingWithId.map((v) => v.id);
+
         const toDelete = existingVariantIds.filter((id) => !keepIds.includes(id));
+
         if (toDelete.length > 0) {
-          await tx.productVariant.deleteMany({ where: { id: { in: toDelete } } });
+          await tx.productVariant.deleteMany({
+            where: { id: { in: toDelete } },
+          });
         }
 
-        // Update existing variants
         for (const v of incomingWithId) {
           await tx.productVariant.update({
             where: { id: v.id },
@@ -350,7 +379,6 @@ export async function PUT(request) {
           });
         }
 
-        // Create new variants
         if (incomingNew.length > 0) {
           await tx.productVariant.createMany({
             data: incomingNew.map((v) => ({
@@ -364,49 +392,85 @@ export async function PUT(request) {
         }
       }
 
-      // ── FIX #4: Upsert inventory row ──────────────────────────
       await tx.inventory.upsert({
-        where: { productId_storeId: { productId, storeId } },
-        update: { quantity: totalQty },
-        create: { productId, storeId, quantity: totalQty, lowStock: 10 },
+        where: {
+          productId_storeId: {
+            productId,
+            storeId,
+          },
+        },
+        update: {
+          quantity: totalQty,
+        },
+        create: {
+          productId,
+          storeId,
+          quantity: totalQty,
+          lowStock: 10,
+        },
       });
 
       return prod;
     });
 
-    return NextResponse.json({ message: 'Product updated successfully', product: updated });
+    return NextResponse.json({
+      message: 'Product updated successfully',
+      product: updated,
+    });
   } catch (error) {
     console.error('PUT /api/store/product error:', error);
+
     if (error.code === 'P2002' && error.meta?.target?.includes('barcode')) {
       return NextResponse.json(
-        { error: 'One or more barcodes are already in use. Each barcode must be unique.' },
+        {
+          error: 'One or more barcodes are already in use. Each barcode must be unique.',
+        },
         { status: 400 }
       );
     }
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// ── DELETE: Delete store product ──────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────────────
 export async function DELETE(request) {
   try {
     const { storeId } = await resolveStore(request);
-    if (!storeId) return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+
+    if (!storeId) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('id');
-    if (!productId) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
 
-    const existing = await prisma.product.findUnique({ where: { id: productId } });
-    if (!existing) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    if (!productId) {
+      return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+    }
+
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
     if (existing.storeId !== storeId) {
       return NextResponse.json({ error: 'You can only delete your own products' }, { status: 403 });
     }
 
-    await prisma.product.delete({ where: { id: productId } });
-    return NextResponse.json({ message: 'Product deleted successfully' });
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
+    return NextResponse.json({
+      message: 'Product deleted successfully',
+    });
   } catch (error) {
     console.error('DELETE /api/store/product error:', error);
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

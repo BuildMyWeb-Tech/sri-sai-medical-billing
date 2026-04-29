@@ -48,7 +48,7 @@ const ALL_LINKS = [
   // { name: 'Orders', href: '/store/orders', icon: ShoppingBag, permission: 'orders' },
   { name: 'Sales Report', href: '/store/analytics', icon: BarChart2, permission: 'reports' },
   { name: 'Employees', href: '/store/employees', icon: Users, permission: 'settings' },
-  { name: 'Store Settings', href: '/store/settings', icon: Settings, permission: 'settings' },
+  // { name: 'Store Settings', href: '/store/settings', icon: Settings, permission: 'settings' },
   // { name: 'Help & Support', href: '/store/help', icon: HelpCircle, permission: null },
 ];
 

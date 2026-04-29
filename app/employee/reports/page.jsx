@@ -405,7 +405,7 @@ export default function EmployeeReportsPage() {
       </div>
 
       {/* Pie + Products Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm p-5">
           <h2 className="font-semibold text-slate-800 text-base mb-4">Revenue by Product</h2>
           {loadingProducts ? (
@@ -501,7 +501,7 @@ export default function EmployeeReportsPage() {
             </div>
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

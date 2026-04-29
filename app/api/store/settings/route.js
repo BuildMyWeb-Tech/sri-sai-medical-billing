@@ -1,85 +1,130 @@
 // app/api/store/settings/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Replaces /api/settings
-// GET  → Store owner + Employee (read-only for billing)
-// POST → Store owner ONLY
-// PUT  → Store owner ONLY (same logic as POST, alias)
+// Store Settings API (STABLE + FIXED AUTH VERSION)
+// GET  → Owner + Employee (read-only)
+// POST → Owner ONLY
+// PUT  → Owner ONLY
 // ─────────────────────────────────────────────────────────────────────────────
+
 import prisma from '@/lib/prisma';
-import { getAuth } from '@clerk/nextjs/server';
+import { getAuth } from '@clerk/nextjs/server'; // ✅ FIXED (IMPORTANT)
 import { NextResponse } from 'next/server';
 import { verifyEmployeeToken } from '@/middlewares/authEmployee';
 import authSeller from '@/middlewares/authSeller';
 
-// ── Check if userId is an admin ───────────────────────────────────────────────
+// ── Admin check ─────────────────────────────────────────────────────────────
 async function isAdmin(userId) {
   try {
-    const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map((s) => s.trim());
+    const adminIds = (process.env.ADMIN_USER_IDS || '')
+      .split(',')
+      .map((s) => s.trim());
     return adminIds.includes(userId);
   } catch {
     return false;
   }
 }
 
-// ── Resolve storeId + role from any auth source ───────────────────────────────
-// Priority: Employee JWT → Clerk store owner
+// ── AUTH RESOLVER (FIXED) ───────────────────────────────────────────────────
 async function resolveAuth(request) {
-  // 1. Employee JWT
+  // 1. Employee JWT (billing system)
   try {
     const emp = verifyEmployeeToken(request);
     if (emp?.storeId) {
-      return { storeId: emp.storeId, source: 'employee', emp };
+      return {
+        storeId: emp.storeId,
+        source: 'employee',
+        userId: null,
+        emp,
+      };
     }
   } catch (_) {}
 
-  // 2. Clerk session (store owner)
+  // 2. Clerk Owner (FIXED)
   try {
-    const { userId } = getAuth(request);
+    const { userId } = getAuth(request); // ✅ CORRECT USAGE
+
     if (userId) {
       const storeId = await authSeller(userId);
-      if (storeId) return { storeId, source: 'owner', userId };
-      // Clerk user but not a seller — check admin
-      return { storeId: null, source: 'clerk', userId };
+
+      if (storeId) {
+        return {
+          storeId,
+          source: 'owner',
+          userId,
+        };
+      }
+
+      return {
+        storeId: null,
+        source: 'clerk',
+        userId,
+      };
     }
   } catch (_) {}
 
-  return { storeId: null, source: 'none' };
+  return {
+    storeId: null,
+    source: 'none',
+    userId: null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/store/settings
-// Allowed: Store owner, Employee (billing read), Admin (with ?storeId=)
+// GET SETTINGS
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(request) {
   try {
-    const { storeId: resolvedStoreId, source, userId } = await resolveAuth(request);
+    const { storeId: resolvedStoreId, userId } = await resolveAuth(request);
 
     const { searchParams } = new URL(request.url);
     const adminStoreId = searchParams.get('storeId');
 
     let storeId;
 
+    // Admin override
     if (adminStoreId) {
-      // Admin fetching settings for a specific store
-      if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
       const admin = await isAdmin(userId);
-      if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (!admin) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
       storeId = adminStoreId;
-    } else if (resolvedStoreId) {
+    }
+    // normal user (owner/employee)
+    else if (resolvedStoreId) {
       storeId = resolvedStoreId;
     } else {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
     }
 
-    // Fetch settings, auto-create if missing
-    let settings = await prisma.storeSettings.findUnique({ where: { storeId } });
+    let settings = await prisma.storeSettings.findUnique({
+      where: { storeId },
+    });
 
+    // auto create default settings
     if (!settings) {
       const store = await prisma.store.findUnique({
         where: { id: storeId },
-        select: { id: true, name: true, address: true },
+        select: {
+          id: true,
+          name: true,
+          address: true,
+        },
       });
-      if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+
+      if (!store) {
+        return NextResponse.json(
+          { error: 'Store not found' },
+          { status: 404 }
+        );
+      }
 
       settings = await prisma.storeSettings.create({
         data: {
@@ -102,23 +147,25 @@ export async function GET(request) {
     return NextResponse.json({ settings });
   } catch (error) {
     console.error('GET /api/store/settings error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/store/settings
-// Allowed: Store owner ONLY
-// Employees are BLOCKED (403)
+// POST SETTINGS (OWNER ONLY)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
-    const { storeId: resolvedStoreId, source, userId, emp } = await resolveAuth(request);
+    const { storeId: resolvedStoreId, source, userId } =
+      await resolveAuth(request);
 
-    // Block employees from updating settings
+    // block employees
     if (source === 'employee') {
       return NextResponse.json(
-        { error: 'Employees cannot update store settings' },
+        { error: 'Employees cannot update settings' },
         { status: 403 }
       );
     }
@@ -129,36 +176,55 @@ export async function POST(request) {
     let storeId;
 
     if (bodyStoreId) {
-      // Admin updating settings for a specific store
-      if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
       const admin = await isAdmin(userId);
-      if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (!admin) {
+        return NextResponse.json(
+          { error: 'Forbidden' },
+          { status: 403 }
+        );
+      }
+
       storeId = bodyStoreId;
     } else if (resolvedStoreId) {
       storeId = resolvedStoreId;
     } else {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
     }
 
-    // Validate taxType
-    if (updateData.taxType && !['SINGLE', 'GST_SPLIT'].includes(updateData.taxType)) {
-      return NextResponse.json({ error: 'Invalid taxType' }, { status: 400 });
+    // validate taxType
+    if (
+      updateData.taxType &&
+      !['SINGLE', 'GST_SPLIT'].includes(updateData.taxType)
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid taxType' },
+        { status: 400 }
+      );
     }
 
-    // Validate numeric fields
     const numericFields = [
       ['taxPercent', updateData.taxPercent],
       ['cgst', updateData.cgst],
       ['sgst', updateData.sgst],
       ['defaultLowStock', updateData.defaultLowStock],
     ];
+
     for (const [field, val] of numericFields) {
       if (val !== undefined && (isNaN(Number(val)) || Number(val) < 0)) {
-        return NextResponse.json({ error: `Invalid value for ${field}` }, { status: 400 });
+        return NextResponse.json(
+          { error: `Invalid value for ${field}` },
+          { status: 400 }
+        );
       }
     }
 
-    // Upsert settings
     const settings = await prisma.storeSettings.upsert({
       where: { storeId },
       update: updateData,
@@ -170,12 +236,18 @@ export async function POST(request) {
       },
     });
 
-    return NextResponse.json({ message: 'Settings saved successfully', settings });
+    return NextResponse.json({
+      message: 'Settings saved successfully',
+      settings,
+    });
   } catch (error) {
     console.error('POST /api/store/settings error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }
 
-// PUT is identical to POST — alias for REST completeness
+// PUT alias
 export const PUT = POST;

@@ -469,7 +469,7 @@ export default function AddProductPage() {
           <p className="text-slate-500 mt-1 text-sm">
             {isEditMode
               ? 'Update product details and variants'
-              : 'Only Product Name is required. Add variants, images, and more as needed.'}
+              : 'Fill the Below Form To Create a New Product'}
           </p>
         </div>
 
@@ -482,7 +482,7 @@ export default function AddProductPage() {
             <span className="font-medium text-slate-700 flex items-center gap-2">
               <ShoppingBag size={16} className="text-purple-500" />
               Product Name
-              <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-normal">Required</span>
+              <span className="text-red-500">*</span>
             </span>
             <input
               type="text"
@@ -494,7 +494,7 @@ export default function AddProductPage() {
           </label>
 
           {/* ── FIX #7: Optional toggles row ─────────────────── */}
-          {!isEditMode && (
+          {/* {!isEditMode && (
             <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
               <span className="text-xs text-slate-400 font-medium self-center mr-1">Optional:</span>
               <SectionToggle show={showDescription} onToggle={() => setShowDescription((v) => !v)} label="Description" />
@@ -503,7 +503,7 @@ export default function AddProductPage() {
               <SectionToggle show={showKeyFeatures} onToggle={() => setShowKeyFeatures((v) => !v)} label="Key Features" />
               <SectionToggle show={showCategories} onToggle={() => setShowCategories((v) => !v)} label="Categories" />
             </div>
-          )}
+          )} */}
 
           {/* ── FIX #7: Description (optional, hidden by default) ── */}
           {(showDescription || isEditMode) && (

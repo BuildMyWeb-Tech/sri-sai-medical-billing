@@ -1,8 +1,3 @@
-📁 .clerk
-   📁 .tmp
-      📄 keyless.json
-      📄 README.md
-      📄 telemetry.json
 📄 .env
 📄 .env.example
 📄 .gitignore
@@ -295,24 +290,6 @@
 📄 postcss.config.mjs
 📁 prisma
    📁 migrations
-      📁 20260323154144_init
-         📄 migration.sql
-      📁 20260327134656_add_key_features
-         📄 migration.sql
-      📁 20260328122814_add_createdby_to_category
-         📄 migration.sql
-      📁 20260329045724_scoped_categories_and_products
-         📄 migration.sql
-      📁 20260407081333_add_store_settings
-         📄 migration.sql
-      📁 20260407121038_add_billing_and_barcode
-         📄 migration.sql
-      📁 20260408171746_add_product_variants
-         📄 migration.sql
-      📁 20260419054434_add_employee_id_to_bill_and_sale
-         📄 migration.sql
-      📁 20260422074532_add_paid_amount_to_bill
-         📄 migration.sql
       📄 migration_lock.toml
    📄 schema.prisma
 📄 README.md

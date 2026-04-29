@@ -88,6 +88,7 @@ export default function EditProductModal({ isOpen, onClose, product, onProductUp
   const [activeLabel, setActiveLabel] = useState(null);
   const [customInput, setCustomInput] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
 
   const [productInfo, setProductInfo] = useState({
     name: '',
@@ -112,6 +113,19 @@ export default function EditProductModal({ isOpen, onClose, product, onProductUp
     };
     if (isOpen) fetchCategories();
   }, [isOpen]);
+
+  useEffect(() => {
+  const fetchGlobalSizes = async () => {
+    try {
+      const token = await getToken();
+      const { data } = await axios.get('/api/store/sizes', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setStoreGlobalSizes(data.sizes || []);
+    } catch { /* non-critical */ }
+  };
+  fetchGlobalSizes();
+}, []);
 
   useEffect(() => {
     if (product) {
@@ -401,8 +415,8 @@ export default function EditProductModal({ isOpen, onClose, product, onProductUp
                   Standard Sizes
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {GLOBAL_SIZES.map((size) => {
-                    const isSelected = variantList.some((v) => v.label === size);
+{[...GLOBAL_SIZES, ...storeGlobalSizes.filter((s) => !GLOBAL_SIZES.includes(s))].map((size) => {
+                      const isSelected = variantList.some((v) => v.label === size);
                     return (
                       <button
                         key={size}

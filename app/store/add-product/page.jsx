@@ -33,8 +33,9 @@ const GLOBAL_SIZES = ['S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 const emptyVariant = (label) => ({ label, barcode: '', price: '', stock: '' });
 
 // ── Add Variant Modal ─────────────────────────────────────────────
-function AddVariantModal({ existingLabels, onAdd, onClose }) {
+function AddVariantModal({ existingLabels, globalSizes = [], onAdd, onClose }) {
   const [input, setInput] = useState('');
+  const [saveGlobally, setSaveGlobally] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -45,9 +46,13 @@ function AddVariantModal({ existingLabels, onAdd, onClose }) {
     if (existingLabels.some((l) => l.toLowerCase() === trimmed.toLowerCase())) {
       toast.error(`"${trimmed}" already exists`); return;
     }
-    onAdd(trimmed);
+    onAdd(trimmed, saveGlobally);
     onClose();
   };
+
+  const unusedGlobalSizes = globalSizes.filter(
+    (s) => !existingLabels.includes(s) && !GLOBAL_SIZES.includes(s)
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -55,6 +60,26 @@ function AddVariantModal({ existingLabels, onAdd, onClose }) {
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 z-10">
         <h3 className="text-base font-semibold text-slate-800 mb-1">Add Custom Size / Variant</h3>
         <p className="text-xs text-slate-400 mb-4">e.g. Regular, Oversize, Slim Fit, 42, Kids…</p>
+
+        {/* Saved global sizes quick-pick */}
+        {/* {unusedGlobalSizes.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Your Saved Sizes</p>
+            <div className="flex flex-wrap gap-2">
+              {unusedGlobalSizes.map((s) => (
+                <button
+                  key={s} type="button"
+                  onClick={() => { onAdd(s, false); onClose(); }}
+                  className="px-3 py-1.5 text-xs font-semibold border border-indigo-200 text-indigo-600 rounded-full hover:bg-indigo-50 transition-all"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-slate-100 my-4" />
+          </div>
+        )} */}
+
         <input
           ref={inputRef} type="text" maxLength={30} value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -62,7 +87,21 @@ function AddVariantModal({ existingLabels, onAdd, onClose }) {
           placeholder="Enter variant label"
           className="w-full p-3 px-4 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 bg-slate-50 text-sm placeholder:text-slate-400 mb-1"
         />
-        <p className="text-xs text-slate-400 text-right mb-4">{input.trim().length}/30</p>
+        <p className="text-xs text-slate-400 text-right mb-3">{input.trim().length}/30</p>
+
+        {/* Save globally checkbox */}
+        <label className="flex items-center gap-2 mb-4 cursor-pointer select-none group">
+          <input
+            type="checkbox" checked={saveGlobally}
+            onChange={(e) => setSaveGlobally(e.target.checked)}
+            className="w-4 h-4 rounded accent-indigo-600"
+          />
+          <span className="text-sm text-slate-600 group-hover:text-indigo-600 transition-colors">
+            Save Size 
+             {/* <span className="text-slate-400 text-xs">(reuse in future products)</span> */}
+          </span>
+        </label>
+
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
           <button type="button" onClick={handleSave} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium flex items-center gap-1.5">
@@ -73,7 +112,6 @@ function AddVariantModal({ existingLabels, onAdd, onClose }) {
     </div>
   );
 }
-
 // ── Variant detail fields ─────────────────────────────────────────
 function VariantFields({ variant, onChange }) {
   return (
@@ -133,11 +171,11 @@ export default function AddProductPage() {
   const [existingImages, setExistingImages] = useState([]);
   const [keyFeatures, setKeyFeatures]       = useState(['']);
 
-  const [variantList, setVariantList]   = useState([]);
-  const [activeLabel, setActiveLabel]   = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  // ── FIX: track whether user tried to submit without variants ──
-  const [variantError, setVariantError] = useState(false);
+const [variantList, setVariantList]   = useState([]);
+const [activeLabel, setActiveLabel]   = useState(null);
+const [showAddModal, setShowAddModal] = useState(false);
+const [variantError, setVariantError] = useState(false);
+const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
 
   const [showDescription,  setShowDescription]  = useState(false);
   const [showMrp,          setShowMrp]          = useState(false);
@@ -166,6 +204,19 @@ export default function AddProductPage() {
     };
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+  const fetchGlobalSizes = async () => {
+    try {
+      const token = await getToken();
+      const { data } = await axios.get('/api/store/sizes', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setStoreGlobalSizes(data.sizes || []);
+    } catch { /* non-critical, silently ignore */ }
+  };
+  fetchGlobalSizes();
+}, []);
 
   // Fetch product for edit mode
   useEffect(() => {
@@ -232,10 +283,22 @@ export default function AddProductPage() {
     }
   };
 
-  const addVariant = (label) => {
-    setVariantList((prev) => [...prev, emptyVariant(label)]);
-    setActiveLabel(label);
-  };
+  const addVariant = async (label, saveGlobally = false) => {
+  setVariantList((prev) => [...prev, emptyVariant(label)]);
+  setActiveLabel(label);
+  if (saveGlobally) {
+    try {
+      const token = await getToken();
+      await axios.post('/api/store/sizes', { label }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setStoreGlobalSizes((prev) =>
+        prev.includes(label) ? prev : [...prev, label]
+      );
+      toast.success(`"${label}" saved to your global sizes`);
+    } catch { toast.error('Failed to save size globally'); }
+  }
+};
 
   const removeVariant = (label) => {
     setVariantList((prev) => prev.filter((v) => v.label !== label));
@@ -527,9 +590,9 @@ export default function AddProductPage() {
 
             {/* Standard sizes */}
             <div className="mb-4">
-              <p className="text-xs text-slate-500 font-medium mb-2 uppercase tracking-wide">Standard Sizes</p>
-              <div className="flex flex-wrap gap-2">
-                {GLOBAL_SIZES.map((size) => {
+             <p className="text-xs text-slate-500 font-medium mb-2 uppercase tracking-wide">Standard Sizes</p>
+<div className="flex flex-wrap gap-2">
+  {[...GLOBAL_SIZES, ...storeGlobalSizes.filter((s) => !GLOBAL_SIZES.includes(s))].map((size) => {
                   const isSelected = variantList.some((v) => v.label === size);
                   return (
                     <button key={size} type="button" onClick={() => toggleGlobalSize(size)}
@@ -664,7 +727,7 @@ export default function AddProductPage() {
           )}
 
           {/* Optional sections toggle bar (only in add mode) */}
-          {!isEditMode && (
+          {/* {!isEditMode && (
             <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
               <span className="text-xs text-slate-400 font-medium self-center mr-1">Optional:</span>
               <SectionToggle show={showDescription}  onToggle={() => setShowDescription((v) => !v)}  label="Description" />
@@ -673,7 +736,7 @@ export default function AddProductPage() {
               <SectionToggle show={showKeyFeatures}  onToggle={() => setShowKeyFeatures((v) => !v)}  label="Key Features" />
               <SectionToggle show={showCategories}   onToggle={() => setShowCategories((v) => !v)}   label="Categories" />
             </div>
-          )}
+          )} */}
 
           {/* Submit */}
           <div className="flex justify-end gap-3 pt-2">
@@ -696,12 +759,13 @@ export default function AddProductPage() {
       </div>
 
       {showAddModal && (
-        <AddVariantModal
-          existingLabels={variantList.map((v) => v.label)}
-          onAdd={addVariant}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+  <AddVariantModal
+    existingLabels={variantList.map((v) => v.label)}
+    globalSizes={storeGlobalSizes}
+    onAdd={addVariant}
+    onClose={() => setShowAddModal(false)}
+  />
+)}
     </div>
   );
 }

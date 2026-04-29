@@ -23,45 +23,49 @@ export default function EmployeeLayout({ children }) {
     }
 
     const token   = localStorage.getItem('empToken');
-    const empData = localStorage.getItem('empData');
+const empData = localStorage.getItem('empData');
 
-    console.log('empToken from localStorage:', token ? 'EXISTS' : 'MISSING');
-    console.log('empData from localStorage:', empData ? 'EXISTS' : 'MISSING');
+if (!token || !empData) {
+  router.replace('/employee/login');
+  return;
+}
 
-    if (!token || !empData) {
-      console.log('No token found → redirecting to login');
+// Use cached session — skip API call if already verified this session
+const cached = sessionStorage.getItem('empSession');
+if (cached) {
+  try {
+    const { employee: emp, store } = JSON.parse(cached);
+    setEmployee(emp);
+    setStoreInfo(store);
+    setLoading(false);
+    return;
+  } catch {
+    sessionStorage.removeItem('empSession');
+  }
+}
+
+// First load — verify token once, then cache result
+fetch('/api/store/employee-auth', {
+  method: 'GET',
+  headers: { 'Authorization': `Bearer ${token}` },
+})
+  .then(async (res) => {
+    const data = await res.json();
+    if (!data.valid) {
+      localStorage.removeItem('empToken');
+      localStorage.removeItem('empData');
       router.replace('/employee/login');
       return;
     }
-
-    // Verify token against API
-    fetch('/api/store/employee-auth', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        console.log('employee-auth response:', data);
-
-        if (!data.valid) {
-          console.log('Token invalid:', data.error);
-          localStorage.removeItem('empToken');
-          localStorage.removeItem('empData');
-          router.replace('/employee/login');
-          return;
-        }
-
-        setEmployee(data.employee);
-        setStoreInfo(data.store);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('employee-auth fetch error:', err);
-        router.replace('/employee/login');
-      });
+    sessionStorage.setItem('empSession', JSON.stringify({
+      employee: data.employee,
+      store: data.store,
+    }));
+    setEmployee(data.employee);
+    setStoreInfo(data.store);
+    setLoading(false);
+  })
+  .catch(() => router.replace('/employee/login'));
   }, [pathname]);
 
   // Login page — render without layout wrapper
@@ -69,7 +73,33 @@ export default function EmployeeLayout({ children }) {
     return <>{children}</>;
   }
 
-  if (loading) return <Loading />;
+if (loading) return (
+  <div className="flex flex-col h-screen bg-slate-50 overflow-hidden animate-pulse">
+    <div className="h-14 bg-white border-b border-slate-100 flex items-center px-6 gap-4">
+      <div className="w-8 h-8 bg-slate-200 rounded-lg" />
+      <div className="w-32 h-4 bg-slate-200 rounded" />
+      <div className="ml-auto flex gap-3">
+        <div className="w-8 h-8 bg-slate-200 rounded-full" />
+      </div>
+    </div>
+    <div className="flex flex-1 overflow-hidden">
+      <div className="hidden md:flex flex-col w-56 bg-white border-r border-slate-100 p-4 gap-3">
+        <div className="w-full h-8 bg-slate-100 rounded-lg" />
+        <div className="w-full h-8 bg-slate-100 rounded-lg" />
+        <div className="w-3/4 h-8 bg-slate-100 rounded-lg" />
+      </div>
+      <div className="flex-1 p-8 space-y-4">
+        <div className="w-48 h-6 bg-slate-200 rounded" />
+        <div className="w-full h-32 bg-slate-100 rounded-xl" />
+        <div className="grid grid-cols-3 gap-4">
+          <div className="h-24 bg-slate-100 rounded-xl" />
+          <div className="h-24 bg-slate-100 rounded-xl" />
+          <div className="h-24 bg-slate-100 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  </div>
+);
   if (!employee) return null;
 
   return (

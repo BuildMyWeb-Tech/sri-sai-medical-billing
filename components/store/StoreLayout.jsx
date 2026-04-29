@@ -105,7 +105,7 @@ const StoreLayout = ({ children }) => {
   }, [mobileMenuOpen]);
 
   // ── 1. Clerk/employee SDK not ready yet ──────────────────────
-  if (!isLoaded || loading) return <Loading />;
+if (!isLoaded || loading) return <StoreSkeleton />;
 
   // ── 2. Fully authenticated seller or employee ─────────────────
   if (isSeller) {
@@ -191,5 +191,41 @@ const StoreLayout = ({ children }) => {
     </div>
   );
 };
+
+function StoreSkeleton() {
+  return (
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden animate-pulse">
+      {/* Navbar skeleton */}
+      <div className="h-14 bg-white border-b border-slate-100 flex items-center px-6 gap-4">
+        <div className="w-8 h-8 bg-slate-200 rounded-lg" />
+        <div className="w-32 h-4 bg-slate-200 rounded" />
+        <div className="ml-auto flex gap-3">
+          <div className="w-8 h-8 bg-slate-200 rounded-full" />
+          <div className="w-8 h-8 bg-slate-200 rounded-full" />
+        </div>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar skeleton */}
+        <div className="hidden md:flex flex-col w-56 bg-white border-r border-slate-100 p-4 gap-3">
+          <div className="w-full h-8 bg-slate-100 rounded-lg" />
+          <div className="w-full h-8 bg-slate-100 rounded-lg" />
+          <div className="w-3/4 h-8 bg-slate-100 rounded-lg" />
+          <div className="w-full h-8 bg-slate-100 rounded-lg" />
+          <div className="w-2/3 h-8 bg-slate-100 rounded-lg" />
+        </div>
+        {/* Content skeleton */}
+        <div className="flex-1 p-8 space-y-4">
+          <div className="w-48 h-6 bg-slate-200 rounded" />
+          <div className="w-full h-32 bg-slate-100 rounded-xl" />
+          <div className="grid grid-cols-3 gap-4">
+            <div className="h-24 bg-slate-100 rounded-xl" />
+            <div className="h-24 bg-slate-100 rounded-xl" />
+            <div className="h-24 bg-slate-100 rounded-xl" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default StoreLayout;

@@ -629,7 +629,10 @@ export default function StoreBillingPage() {
   const [billDiscount, setBillDiscount]       = useState(0);
   const [paymentMode, setPaymentMode]         = useState('CASH');
   // ── NEW: cash-change state ─────────────────────────────────────────────────
-  const [paidAmount, setPaidAmount]           = useState('');
+const [paidAmount, setPaidAmount]           = useState('');
+  const [editingTax, setEditingTax]           = useState(false);
+  const [taxInput, setTaxInput]               = useState('');
+  const [savingTax, setSavingTax]             = useState(false);  
   // ──────────────────────────────────────────────────────────────────────────
   const [note, setNote]                       = useState('');
   const [loading, setLoading]                 = useState(false);
@@ -686,6 +689,24 @@ export default function StoreBillingPage() {
     setLastScanFeedback({ type, message });
     feedbackTimer.current = setTimeout(() => setLastScanFeedback(null), 2500);
   }, []);
+
+   // ── Save tax to DB ────────────────────────────────────────────────────────
+  const saveTax = async () => {
+    const val = parseFloat(taxInput);
+    if (isNaN(val) || val < 0 || val > 100) { setEditingTax(false); return; }
+    setSavingTax(true);
+    try {
+      const token = getStoreToken();
+      const res = await fetch('/api/store/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ taxPercent: val, taxType: 'SINGLE' }),
+      });
+      const data = await res.json();
+      if (data.settings) setSettings(data.settings);
+    } catch (e) { console.error('Tax save failed:', e); }
+    finally { setSavingTax(false); setEditingTax(false); }
+  };
 
   // ── Init ──────────────────────────────────────────────────────────────────
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -1179,11 +1200,35 @@ useEffect(() => {
                       <span>After discount</span><span className="font-medium">{fmt(discounted)}</span>
                     </div>
                   )}
-                  {taxResult.taxAmount > 0 && (
-                    <div className="flex justify-between text-sm text-slate-500">
-                      <span>{taxLabel}</span><span>+{fmt(taxResult.taxAmount)}</span>
-                    </div>
-                  )}
+                  
+                  <div className="flex items-center justify-between text-sm text-slate-500">
+                    {editingTax ? (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-slate-500 text-xs">Tax %</span>
+                        <input
+                          autoFocus type="number" min="0" max="100" step="0.5"
+                          value={taxInput}
+                          onChange={(e) => setTaxInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveTax(); if (e.key === 'Escape') setEditingTax(false); }}
+                          className="w-20 text-center text-sm border-2 border-indigo-300 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        <button onClick={saveTax} disabled={savingTax} className="px-2 py-0.5 bg-indigo-600 text-white text-xs rounded-lg disabled:opacity-50">
+                          {savingTax ? '…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingTax(false)} className="px-2 py-0.5 text-slate-400 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">✕</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setTaxInput(String(settings?.taxPercent ?? 0)); setEditingTax(true); }}
+                        className="flex items-center gap-1 hover:text-indigo-600 transition-colors group"
+                        title="Click to edit tax"
+                      >
+                        <span>{taxLabel}</span>
+                        <span className="text-[10px] text-slate-300 group-hover:text-indigo-400">✎</span>
+                      </button>
+                    )}
+                    {!editingTax && <span>+{fmt(taxResult.taxAmount)}</span>}
+                  </div>
                   <div className="border-t border-slate-200 pt-2 flex justify-between">
                     <span className="font-bold text-slate-800">Total</span>
                     <span className="font-bold text-xl text-slate-900">{fmt(grandTotal)}</span>

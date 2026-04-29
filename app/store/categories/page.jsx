@@ -39,9 +39,9 @@ export default function StoreCategoriesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '' });
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-
+const [imageFile, setImageFile] = useState(null);
+const [imagePreview, setImagePreview] = useState(null);
+const [duplicateWarning, setDuplicateWarning] = useState(false);
   // Delete state
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: '' });
   const [depLoading, setDepLoading] = useState(false);
@@ -112,19 +112,16 @@ export default function StoreCategoriesPage() {
     setShowForm(true);
   };
 
-  const closeForm = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setFormData({ name: '', description: '' });
-    clearImage();
-  };
+ const closeForm = () => {
+  setShowForm(false);
+  setEditingId(null);
+  setFormData({ name: '', description: '' });
+  setDuplicateWarning(false);
+  clearImage();
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!editingId && !imageFile) {
-      toast.error('Please upload a category image');
-      return;
-    }
     try {
       setSubmitting(true);
       const token = await getToken();
@@ -256,10 +253,10 @@ export default function StoreCategoriesPage() {
           <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Image */}
             <div className="md:col-span-1">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Category Image{!editingId && <span className="text-red-500 ml-1">*</span>}
-                {editingId && <span className="text-slate-400 text-xs ml-1">(optional)</span>}
-              </label>
+             <label className="block text-sm font-medium text-slate-700 mb-2">
+  Category Image{' '}
+  <span className="text-slate-400 text-xs font-normal">(optional)</span>
+</label>
               <div
                 className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center h-48 relative overflow-hidden cursor-pointer group hover:border-green-400 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
@@ -313,13 +310,29 @@ export default function StoreCategoriesPage() {
                   Category Name <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Electronics"
-                  className="w-full p-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-100 bg-slate-50"
-                  required
-                />
+  type="text"
+  value={formData.name}
+  onChange={(e) => {
+    const val = e.target.value;
+    setFormData({ ...formData, name: val });
+    const isDuplicate = categories.some(
+      (c) => c.name.toLowerCase() === val.trim().toLowerCase() && c.id !== editingId
+    );
+    setDuplicateWarning(isDuplicate);
+  }}
+  placeholder="e.g. Electronics"
+  className={`w-full p-3 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-slate-50 ${
+    duplicateWarning
+      ? 'border-amber-400 focus:ring-amber-100'
+      : 'border-slate-200 focus:ring-green-100'
+  }`}
+  required
+/>
+{duplicateWarning && (
+  <p className="flex items-center gap-1.5 text-xs text-amber-600 mt-1.5">
+    <AlertTriangle size={12} /> A category with this name already exists.
+  </p>
+)}
               </div>
               <div>
                <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -356,7 +369,7 @@ export default function StoreCategoriesPage() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+  disabled={submitting || duplicateWarning}
                 className={`px-5 py-2.5 rounded-lg text-white flex items-center gap-1.5 text-sm font-medium disabled:opacity-70 transition-colors ${editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-green-600 hover:bg-green-700'}`}
               >
                 {submitting ? (
@@ -464,12 +477,18 @@ export default function StoreCategoriesPage() {
                   className={`border rounded-xl overflow-hidden hover:shadow-md transition-shadow group ${owned ? 'border-slate-200' : 'border-slate-100 opacity-90'}`}
                 >
                   <div className="relative h-44 bg-slate-100">
-                    <Image
-                      src={cat.image}
-                      alt={cat.name}
-                      fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+  {cat.image ? (
+    <Image
+      src={cat.image}
+      alt={cat.name}
+      fill
+      className="object-cover transition-transform duration-500 group-hover:scale-105"
+    />
+  ) : (
+    <div className="w-full h-full flex items-center justify-center text-slate-300">
+      <Layers size={36} />
+    </div>
+  )}
                     <div className="absolute top-2 right-2">
                       <ScopeBadge cat={cat} />
                     </div>
@@ -535,9 +554,13 @@ export default function StoreCategoriesPage() {
                       className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                     >
                       <td className="px-5 py-4">
-                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-100">
-                          <Image src={cat.image} alt={cat.name} fill className="object-cover" />
-                        </div>
+                       <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center">
+  {cat.image ? (
+    <Image src={cat.image} alt={cat.name} fill className="object-cover" />
+  ) : (
+    <Layers size={16} className="text-slate-300" />
+  )}
+</div>
                       </td>
                       <td className="px-5 py-4 font-medium text-slate-800">{cat.name}</td>
                       <td className="px-5 py-4 text-slate-500 hidden md:table-cell max-w-xs">

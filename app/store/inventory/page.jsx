@@ -106,7 +106,7 @@ function SummaryCards({ inventory }) {
 
   return (
     <div className="grid grid-cols-3 gap-4 mb-6">
-      <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm">
+     <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm">
         <p className="text-xs text-slate-500 mb-1">In Stock</p>
         <p className="text-2xl font-bold text-green-600">{okCount}</p>
       </div>

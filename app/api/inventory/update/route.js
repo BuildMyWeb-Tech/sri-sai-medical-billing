@@ -1,4 +1,5 @@
-// app/api/inventory/route.js
+// app\api\inventory\update\route.js
+
 // Threshold-only update — never touches quantity
 import prisma from '@/lib/prisma';
 import authSeller from '@/middlewares/authSeller';
@@ -30,6 +31,6 @@ export async function POST(request) {
     return NextResponse.json({ message: 'Threshold updated', inventory });
   } catch (error) {
     console.error('POST /api/inventory error:', error);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -709,17 +709,29 @@ export default function EmployeeBillingPage() {
   });
 
   const addVariantToCart = useCallback((product, variant) => {
+    // 🚨 Null guard — prevent crash on invalid scan
+    if (!product || !variant) {
+      console.warn('[EMP POS] addVariantToCart: invalid product/variant', { product, variant });
+      showScanFeedback('error', 'Invalid product selection');
+      return;
+    }
     const existingIdx = cartItems.findIndex((i) => i.variantId === variant.id);
     if (existingIdx >= 0) { setDuplicateModal({ product, variant, existingIdx }); return; }
-    if (variant.stock === 0) { showScanFeedback('error', `Out of stock: ${product.name} (${variant.size})`); return; }
+    if ((variant.stock ?? 0) === 0) { showScanFeedback('error', `Out of stock: ${product.name} (${variant.size || ''})`); return; }
     setCartItems((prev) => [...prev, buildCartItem(product, variant)]);
-    showScanFeedback('success', `✓ ${product.name} (${variant.size})`);
+    showScanFeedback('success', `✓ ${product.name} (${variant.size || ''})`);
   }, [cartItems, showScanFeedback]); // eslint-disable-line
 
   // Barcode scan — O(1) Map lookup via productCache module
   const handleBarcodeScanned = useCallback((barcode) => {
+    console.log(`[Barcode][EMP] Scanned: "${barcode}" at ${new Date().toISOString()}`);
     const found = findByBarcodeLocal(barcode);
-    if (!found) { showScanFeedback('error', `Unknown barcode: ${barcode}`); return; }
+    if (!found) {
+      console.warn(`[Barcode][EMP] ❌ Unknown barcode: "${barcode}"`);
+      showScanFeedback('error', `Unknown barcode: ${barcode}`);
+      return;
+    }
+    console.log(`[Barcode][EMP] ✅ Found: ${found.product?.name} (${found.variant?.size})`);
     addVariantToCart(found.product, found.variant);
   }, [addVariantToCart, showScanFeedback]);
 

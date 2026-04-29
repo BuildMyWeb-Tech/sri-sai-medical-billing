@@ -1,3 +1,4 @@
+// C:\Users\Siddharathan\Desktop\sri-sai-medical-billing\app\store\billing\page.jsx
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -1284,26 +1285,7 @@ useEffect(() => {
               </div> */}
             </div>
 
-            {/* Complete bill button — always visible, fixed at bottom of right panel */}
-            <div className="p-4 border-t border-slate-200 flex-shrink-0 bg-white">
-              {/* <button onClick={completeBill} disabled={!cartItems.length || loading}
-                className={`w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg ${cartItems.length && !loading ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 hover:shadow-xl active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
-                {loading
-                  ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                  : <><CheckCircle size={20} /> Complete Bill · {fmt(grandTotal)}</>
-                }
-              </button> */}
-              {/* Cash change summary below button */}
-              {/* {paymentMode === 'CASH' && parseFloat(paidAmount) >= grandTotal && grandTotal > 0 && (
-                <div className="flex items-center justify-between mt-2 px-1">
-                  <span className="text-xs text-slate-500">Paid {fmt(parseFloat(paidAmount))}</span>
-                  <span className="text-xs font-semibold text-green-600">Change {fmt(changeAmount)}</span>
-                </div>
-              )} */}
-              {/* <p className="text-center text-xs text-slate-400 mt-1.5">
-                {qzStatus === 'connected' && printerName ? '⚡ Prints directly to thermal printer' : isOnline ? 'Saves & syncs instantly' : '⚡ Saves offline · Syncs when online'}
-              </p> */}
-            </div>
+
           </div>
         </div>
       ) : (

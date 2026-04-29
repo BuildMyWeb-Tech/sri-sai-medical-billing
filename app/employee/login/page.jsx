@@ -42,7 +42,7 @@ export default function EmployeeLoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center text-4xl font-bold text-slate-800">
-            <span className="text-green-600">King</span>cart
+            <span className="text-green-600">Sri Sai </span> Medical
             <span className="text-green-600 text-5xl leading-none">.</span>
           </Link>
           <p className="text-slate-500 text-sm mt-2">Employee Portal</p>
@@ -54,9 +54,7 @@ export default function EmployeeLoginPage() {
               <Users size={26} className="text-blue-600" />
             </div>
             <h1 className="text-xl font-bold text-slate-800">Employee Login</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Sign in with your employee credentials
-            </p>
+            <p className="text-slate-400 text-sm mt-1">Sign in with your employee credentials</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -65,7 +63,10 @@ export default function EmployeeLoginPage() {
                 Email Address
               </label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Mail
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
                 <input
                   type="email"
                   value={form.email}
@@ -79,7 +80,10 @@ export default function EmployeeLoginPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Lock
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}

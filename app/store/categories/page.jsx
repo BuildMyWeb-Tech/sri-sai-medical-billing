@@ -322,17 +322,17 @@ export default function StoreCategoriesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Description <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe this category..."
-                  rows={4}
-                  className="w-full p-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-100 bg-slate-50 resize-none"
-                  required
-                />
+               <label className="block text-sm font-medium text-slate-700 mb-2">
+  Description{' '}
+  <span className="text-slate-400 text-xs font-normal">(optional)</span>
+</label>
+<textarea
+  value={formData.description}
+  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+  placeholder="Describe this category..."
+  rows={4}
+  className="w-full p-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-100 bg-slate-50 resize-none"
+/>
               </div>
               {/* {!editingId && (
                 <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700">

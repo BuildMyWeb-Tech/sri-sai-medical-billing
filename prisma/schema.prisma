@@ -23,8 +23,8 @@ model User {
 model Category {
   id          String   @id @default(cuid())
   name        String
-  description String
-  image       String
+  description String   @default("")
+  image       String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdBy   String   @default("ADMIN")
@@ -45,6 +45,7 @@ model Product {
   category    String[] @default([])
   quantity    Int      @default(0)
   inStock     Boolean  @default(true)
+  isDeleted   Boolean  @default(false)
   storeId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -63,6 +64,7 @@ model Product {
   @@index([createdBy])
   @@index([inStock])
   @@index([sku])
+  @@index([isDeleted])
 }
 
 model ProductVariant {

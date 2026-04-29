@@ -6,7 +6,7 @@ import {
   syncUserUpdation,
   syncUserDeletion,
   deleteCouponOnExpiry,
-  createSaleOnOrder, // ✅ NEW — auto Sale record on order placed
+  createSaleOnOrder,
 } from '@/inngest/functions';
 
 export const { GET, POST, PUT } = serve({
@@ -16,6 +16,6 @@ export const { GET, POST, PUT } = serve({
     syncUserUpdation,
     syncUserDeletion,
     deleteCouponOnExpiry,
-    createSaleOnOrder, // ✅ registered here
+    createSaleOnOrder,
   ],
 });

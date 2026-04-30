@@ -133,12 +133,13 @@ export async function POST(request) {
             });
 
             deducted.push({
-              variantId: cleanId,
-              productId: variant.productId,
-              deducted: deductQty,
-              newStock,
-              newProductStock: totalStock,
-            });
+  variantId: cleanId,
+  productId: variant.productId,
+  deducted: deductQty,
+  newStock,
+  newProductStock: totalStock,
+  lowStock: newStock <= 10, // ✅ flag for client
+});
           });
         }
 

@@ -14,7 +14,7 @@ import { calculateTax, formatCurrency } from '@/lib/storeSettings';
 import {
   initProductCache,
   searchProducts,
-  findVariantByBarcode as findByBarcodeLocal,
+  findVariantByBarcodeSync as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
 import ModalWrapper from '@/components/ui/ModalWrapper';
 
@@ -206,7 +206,12 @@ async function connectQZ() {
   try {
     const qz = await loadQZ();
     if (!qz) throw new Error('QZ unavailable');
-    if (!qz.websocket.isActive()) await qz.websocket.connect({ retries: 2, delay: 1 });
+
+    // ✅ Bypass certificate requirement for unsigned/dev mode
+    qz.security.setCertificatePromise((resolve) => resolve('-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'));
+    qz.security.setSignaturePromise((toSign) => (resolve) => resolve(''));
+
+    if (!qz.websocket.isActive()) await qz.websocket.connect({ retries: 3, delay: 1 });
     _qzConn = true;
     qz.websocket.setClosedCallbacks(() => { _qzConn = false; });
     return { ok: true };
@@ -888,11 +893,13 @@ useEffect(() => {
   });
 }, [showScanFeedback]);
 
-  const handleBarcodeScanned = useCallback((barcode) => {
-  const found = findByBarcodeLocal(barcode); // ✅ correct function
+ const handleBarcodeScanned = useCallback((barcode) => {
+  if (!barcode) return;
+  const trimmed = barcode.trim();
+  const found = findByBarcodeLocal(trimmed);
 
   if (!found || !found.product || !found.variant) {
-    showScanFeedback('error', `Unknown barcode: ${barcode}`);
+    showScanFeedback('error', `Unknown barcode: ${trimmed}`);
     return;
   }
 
@@ -998,10 +1005,18 @@ useEffect(() => {
       if (isOnline) {
         const token = getStoreToken();
         fetch('/api/inventory/deduct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
-        }).catch(console.error);
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
+})
+.then((r) => r.json())
+.then((data) => {
+  const lowStockItems = (data.deducted || []).filter((d) => d.lowStock);
+  if (lowStockItems.length > 0) {
+    showScanFeedback('warning', `⚠ Low stock on ${lowStockItems.length} item(s)`);
+  }
+})
+.catch(console.error);
       }
       setSuccessBill(billData);
       await refreshQueueCount();

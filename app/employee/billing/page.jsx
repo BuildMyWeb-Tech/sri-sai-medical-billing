@@ -27,8 +27,9 @@ import {
 } from 'lucide-react';
 import { calculateTax, formatCurrency } from '@/lib/storeSettings';
 import {
+  initProductCache,
   searchProducts as localSearch,
-  findVariantByBarcode as findByBarcodeLocal,
+  findVariantByBarcodeSync as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
@@ -209,9 +210,17 @@ async function connectQZ() {
   if (_qzConnecting) { await new Promise((r) => setTimeout(r, 2000)); return _qzConn ? { ok: true } : { ok: false, error: 'Timeout' }; }
   _qzConnecting = true;
   try {
-    const qz = await loadQZ(); if (!qz) throw new Error('QZ unavailable');
-    if (!qz.websocket.isActive()) await qz.websocket.connect({ retries: 2, delay: 1 });
-    _qzConn = true; qz.websocket.setClosedCallbacks(() => { _qzConn = false; }); return { ok: true };
+    const qz = await loadQZ();
+    if (!qz) throw new Error('QZ unavailable');
+
+    // ✅ Bypass certificate requirement for unsigned/dev mode
+    qz.security.setCertificatePromise((resolve) => resolve('-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'));
+    qz.security.setSignaturePromise((toSign) => (resolve) => resolve(''));
+
+    if (!qz.websocket.isActive()) await qz.websocket.connect({ retries: 3, delay: 1 });
+    _qzConn = true;
+    qz.websocket.setClosedCallbacks(() => { _qzConn = false; });
+    return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; } finally { _qzConnecting = false; }
 }
 async function getQZPrinters() {
@@ -550,6 +559,8 @@ const [paidAmount, setPaidAmount]             = useState('');
   const [isFullscreen, setIsFullscreen]         = useState(false);
   const [localProducts, setLocalProducts]       = useState([]);
   const [lastScanFeedback, setLastScanFeedback] = useState(null);
+  const [unknownBarcodeModal, setUnknownBarcodeModal] = useState(null);
+
 
   // Print
   const [printerName, setPrinterName]             = useState('');
@@ -624,26 +635,30 @@ const [paidAmount, setPaidAmount]             = useState('');
       } catch { setHasPermission(false); }
     } else { setHasPermission(false); }
 
-    const token = getEmpToken();
-    if (token) fetch('/api/store/settings', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
+const token = getEmpToken();
+if (token) fetch('/api/store/settings', { headers: { Authorization: `Bearer ${token}` } })
+  .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
 
-    const onOnline  = () => { setIsOnline(true); triggerSync(); refreshProductCache(); };
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    setIsOnline(navigator.onLine);
+const onOnline  = () => { setIsOnline(true); triggerSync(); refreshProductCache(); };
+const onOffline = () => setIsOnline(false);
+window.addEventListener('online', onOnline);
+window.addEventListener('offline', onOffline);
+setIsOnline(navigator.onLine);
 
-    refreshQueueCount();
-    idbGetAll(STORE_LOCAL).then((bills) => setLocalBills(bills.sort((a, b) => b.createdAt - a.createdAt)));
-    idbGetAll(STORE_QUEUE).then((q) => setQueueBillIds(new Set(q.map((b) => b.localId))));
+refreshQueueCount();
+idbGetAll(STORE_LOCAL).then((bills) => setLocalBills(bills.sort((a, b) => b.createdAt - a.createdAt)));
+idbGetAll(STORE_QUEUE).then((q) => setQueueBillIds(new Set(q.map((b) => b.localId))));
 
-    const onFS = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFS);
+const onFS = () => setIsFullscreen(!!document.fullscreenElement);
+document.addEventListener('fullscreenchange', onFS);
 
-    const cached = getProductsFromCache();
-    if (cached) setLocalProducts(cached);
-    if (navigator.onLine) refreshProductCache();
+initProductCache({
+  storeId: 'default',
+  token,
+  onRefresh: () => console.log('🔄 Employee products refreshed'),
+}).then((products) => {
+  if (products?.length) setLocalProducts(products);
+}).catch(console.error);
 
     const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
     setPrinterName(savedPrinter);
@@ -681,13 +696,17 @@ const [paidAmount, setPaidAmount]             = useState('');
 
   // ── Product cache ─────────────────────────────────────────────────────────
   const refreshProductCache = async () => {
-    try {
-      const token = getEmpToken();
-      const res   = await fetch('/api/store/products-for-billing', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const data  = await res.json(); const products = data.products || [];
-      setLocalProducts(products); saveProductsToCache(products);
-    } catch (e) { console.warn('Product cache refresh failed:', e); }
-  };
+  try {
+    const token = getEmpToken();
+    const products = await initProductCache({
+      storeId: 'default',
+      token,
+      forceRefresh: true,
+      onRefresh: () => {},
+    });
+    if (products?.length) setLocalProducts(products);
+  } catch (e) { console.warn('Product cache refresh failed:', e); }
+};
 
   // ── Search — LOCAL ONLY, instant, no API call during billing ─────────────
   const handleSearch = useCallback((query) => {
@@ -729,32 +748,47 @@ const [paidAmount, setPaidAmount]             = useState('');
     itemDiscount: 0, total: variant.price, stock: variant.stock,
   });
 
-  const addVariantToCart = useCallback((product, variant) => {
-    // 🚨 Null guard — prevent crash on invalid scan
-    if (!product || !variant) {
+const addVariantToCart = useCallback((product, variant) => {
+    if (!product || !variant || !variant.id) {
       console.warn('[EMP POS] addVariantToCart: invalid product/variant', { product, variant });
       showScanFeedback('error', 'Invalid product selection');
       return;
     }
-    const existingIdx = cartItems.findIndex((i) => i.variantId === variant.id);
-    if (existingIdx >= 0) { setDuplicateModal({ product, variant, existingIdx }); return; }
-    if ((variant.stock ?? 0) === 0) { showScanFeedback('error', `Out of stock: ${product.name} (${variant.size || ''})`); return; }
-    setCartItems((prev) => [...prev, buildCartItem(product, variant)]);
-    showScanFeedback('success', `✓ ${product.name} (${variant.size || ''})`);
-  }, [cartItems, showScanFeedback]); // eslint-disable-line
+    // ✅ Clean variantId — strip duplicate suffix if any
+    const cleanVariantId = String(variant.id).split('_')[0];
+    const cleanVariant = { ...variant, id: cleanVariantId };
+
+    setCartItems((prev) => {
+      const existingIdx = prev.findIndex((i) => 
+        String(i.variantId).split('_')[0] === cleanVariantId
+      );
+      if (existingIdx >= 0) {
+        setDuplicateModal({ product, variant: cleanVariant, existingIdx });
+        return prev;
+      }
+      if ((cleanVariant.stock ?? 0) === 0) {
+        showScanFeedback('error', `Out of stock: ${product.name} (${cleanVariant.size || ''})`);
+        return prev;
+      }
+      showScanFeedback('success', `✓ ${product.name} (${cleanVariant.size || ''})`);
+      return [...prev, buildCartItem(product, cleanVariant)];
+    });
+  }, [showScanFeedback]);
 
   // Barcode scan — O(1) Map lookup via productCache module
-  const handleBarcodeScanned = useCallback((barcode) => {
-    console.log(`[Barcode][EMP] Scanned: "${barcode}" at ${new Date().toISOString()}`);
-    const found = findByBarcodeLocal(barcode);
-    if (!found) {
-      console.warn(`[Barcode][EMP] ❌ Unknown barcode: "${barcode}"`);
-      showScanFeedback('error', `Unknown barcode: ${barcode}`);
+const handleBarcodeScanned = useCallback((barcode) => {
+    if (!barcode) return;
+    const trimmed = barcode.trim();
+    console.log(`[Barcode][EMP] Scanned: "${trimmed}" at ${new Date().toISOString()}`);
+    const found = findByBarcodeLocal(trimmed);
+    if (!found || !found.product || !found.variant) {
+      console.warn(`[Barcode][EMP] ❌ Unknown barcode: "${trimmed}"`);
+      setUnknownBarcodeModal(trimmed); // ✅ show popup instead of just feedback
       return;
     }
     console.log(`[Barcode][EMP] ✅ Found: ${found.product?.name} (${found.variant?.size})`);
     addVariantToCart(found.product, found.variant);
-  }, [addVariantToCart, showScanFeedback]);
+  }, [addVariantToCart, showScanFeedback, setUnknownBarcodeModal]);
 
   const handleProductSelectedFromSearch = (product) => {
     setSuggestions([]);
@@ -836,11 +870,19 @@ changeAmount: changeAmt,
       setQueueBillIds((prev) => new Set([...prev, localId]));
       if (isOnline) {
         const token = getEmpToken();
-        fetch('/api/inventory/deduct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
-        }).catch(console.error);
+       fetch('/api/inventory/deduct', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
+})
+.then((r) => r.json())
+.then((data) => {
+  const lowStockItems = (data.deducted || []).filter((d) => d.lowStock);
+  if (lowStockItems.length > 0) {
+    showScanFeedback('warning', `⚠ Low stock on ${lowStockItems.length} item(s)`);
+  }
+})
+.catch(console.error);
       }
       setSuccessBill(billData);
       await refreshQueueCount();
@@ -1332,6 +1374,36 @@ changeAmount: changeAmt,
         </div>
       )}
 
+      {/* ── UNKNOWN BARCODE MODAL ─────────────────────────────── */}
+      {unknownBarcodeModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertCircle size={20} className="text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">Product Not Found</h3>
+                <p className="text-sm text-slate-500 font-mono mt-0.5">{unknownBarcodeModal}</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">
+              This barcode is not linked to any product in the system.
+            </p>
+            <div className="space-y-2">
+              <a href="/employee/add-product"
+                className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                + Add New Product
+              </a>
+              <button onClick={() => setUnknownBarcodeModal(null)}
+                className="w-full py-2.5 text-slate-400 hover:text-slate-600 text-sm border border-slate-200 rounded-xl hover:bg-slate-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
       {sizePickerModal && (
         <SizePickerModal product={sizePickerModal}

@@ -57,29 +57,29 @@ async function loadQZ() {
   if (typeof window === 'undefined') return null;
   if (qzInstance) return qzInstance;
 
-  // Try to import qz-tray npm package
   try {
     const mod = await import('qz-tray');
     qzInstance = mod.default || mod;
-    return qzInstance;
   } catch (_) {}
 
-  // Fallback: load from CDN
-  return new Promise((resolve) => {
-    if (window.qz) {
-      qzInstance = window.qz;
-      resolve(qzInstance);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
-    script.onload = () => {
-      qzInstance = window.qz;
-      resolve(qzInstance);
-    };
-    script.onerror = () => resolve(null);
-    document.head.appendChild(script);
-  });
+  if (!qzInstance) {
+    await new Promise((resolve) => {
+      if (window.qz) { qzInstance = window.qz; resolve(); return; }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+      script.onload = () => { qzInstance = window.qz; resolve(); };
+      script.onerror = () => resolve();
+      document.head.appendChild(script);
+    });
+  }
+
+  // ✅ Set unsigned mode — no certificate needed
+  if (qzInstance) {
+    qzInstance.security.setCertificatePromise((resolve) => resolve('-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'));
+    qzInstance.security.setSignaturePromise((toSign) => (resolve) => resolve(''));
+  }
+
+  return qzInstance || null;
 }
 
 /**

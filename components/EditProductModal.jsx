@@ -364,7 +364,7 @@ export default function EditProductModal({ isOpen, onClose, product, onProductUp
             </label>
 
             {/* Description */}
-            <label className="flex flex-col gap-2">
+             {/* <label className="flex flex-col gap-2">
               <span className="font-medium text-slate-700 flex items-center gap-2">
                 <Tag size={16} className="text-amber-500" /> Description
                 <span className="text-xs text-slate-400 font-normal">(optional)</span>
@@ -376,7 +376,7 @@ export default function EditProductModal({ isOpen, onClose, product, onProductUp
                 rows={3}
                 className="w-full p-3 px-4 outline-none border border-slate-200 rounded-lg resize-none focus:ring-2 focus:ring-indigo-100 bg-slate-50 placeholder:text-slate-400"
               />
-            </label>
+            </label> */}
 
             {/* MRP */}
             <label className="flex flex-col gap-2 max-w-xs">

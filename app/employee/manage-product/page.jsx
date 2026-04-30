@@ -33,7 +33,7 @@ function InlineVariants({ variants, lowStockThreshold }) {
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Size</th>
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Price</th>
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Stock</th>
-            <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide hidden sm:table-cell">Status</th>
+            {/* <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide hidden sm:table-cell">Status</th> */}
           </tr>
         </thead>
         <tbody>
@@ -57,11 +57,11 @@ function InlineVariants({ variants, lowStockThreshold }) {
                     {!isOut && isLow && <AlertCircle size={10} className="text-amber-500" />}
                   </div>
                 </td>
-                <td className="px-3 py-2 hidden sm:table-cell">
+                {/* <td className="px-3 py-2 hidden sm:table-cell">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOut ? 'bg-red-50 text-red-600' : isLow ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
                     {isOut ? 'Out' : isLow ? 'Low' : 'OK'}
                   </span>
-                </td>
+                </td> */}
               </tr>
             );
           })}
@@ -89,7 +89,7 @@ function ProductRow({ product, lowStockThreshold }) {
           )}
           <div className="flex-1 min-w-0">
             <p className="font-medium text-slate-800 text-sm line-clamp-1">{product.name}</p>
-            <p className="text-xs text-slate-400 mt-0.5">MRP ₹{product.mrp.toLocaleString('en-IN')}</p>
+            {/* <p className="text-xs text-slate-400 mt-0.5">MRP ₹{product.mrp.toLocaleString('en-IN')}</p> */}
             <InlineVariants variants={variants} lowStockThreshold={lowStockThreshold} />
           </div>
         </div>
@@ -105,12 +105,12 @@ function ProductRow({ product, lowStockThreshold }) {
         </div>
       </td>
 
-      <td className="px-4 py-4 whitespace-nowrap">
+      {/* <td className="px-4 py-4 whitespace-nowrap">
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${product.inStock ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
           <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${product.inStock ? 'bg-green-500' : 'bg-red-500'}`} />
           {product.inStock ? 'Active' : 'Inactive'}
         </span>
-      </td>
+      </td> */}
 
       <td className="px-4 py-4 whitespace-nowrap">
         <div className="flex flex-wrap gap-1 max-w-[140px]">
@@ -386,8 +386,8 @@ export default function EmployeeManageProductPage() {
                   <tr className="border-b border-slate-100 bg-slate-50">
                     <th className="text-left px-5 py-4 font-medium text-slate-500">Product &amp; Variants</th>
                     <th className="text-left px-4 py-4 font-medium text-slate-500">Total Stock</th>
-                    <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th>
-                    <th className="text-left px-4 py-4 font-medium text-slate-500">Categories</th>
+                    {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th> */}
+                    {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Categories</th> */}
                   </tr>
                 </thead>
                 <tbody>{[1,2,3,4,5].map((i) => <SkeletonRow key={i} />)}</tbody>
@@ -407,8 +407,8 @@ export default function EmployeeManageProductPage() {
                     <tr className="border-b border-slate-100 bg-slate-50">
                       <th className="text-left px-5 py-4 font-medium text-slate-500">Product &amp; Variants</th>
                       <th className="text-left px-4 py-4 font-medium text-slate-500">Total Stock</th>
-                      <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th>
-                      <th className="text-left px-4 py-4 font-medium text-slate-500">Categories</th>
+                      {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th> */}
+                      {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Categories</th> */}
                     </tr>
                   </thead>
                   <tbody>
@@ -428,7 +428,7 @@ export default function EmployeeManageProductPage() {
 
         <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700 flex items-center gap-2">
           <PackageOpen size={15} className="text-blue-500 flex-shrink-0" />
-          <p>Products are <strong>view-only</strong>. Variants are shown inline. Only store owners can modify products.</p>
+          <p>Products are <strong>view-only</strong>. Only store owners can modify products.</p>
         </div>
       </div>
     </div>

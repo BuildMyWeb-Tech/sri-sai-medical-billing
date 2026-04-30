@@ -59,7 +59,7 @@ function AddVariantModal({ existingLabels, globalSizes = [], onAdd, onClose }) {
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 z-10">
         <h3 className="text-base font-semibold text-slate-800 mb-1">Add Custom Size / Variant</h3>
-        <p className="text-xs text-slate-400 mb-4">e.g. Regular, Oversize, Slim Fit, 42, Kids…</p>
+        <p className="text-xs text-slate-400 mb-4">e.g. Regular, Standard, XS…</p>
 
         {/* Saved global sizes quick-pick */}
         {/* {unusedGlobalSizes.length > 0 && (
@@ -499,7 +499,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
           </label>
 
           {/* Description (optional) */}
-          {(showDescription || isEditMode) && (
+          {/* {(showDescription || isEditMode) && (
             <label className="flex flex-col gap-2">
               <span className="font-medium text-slate-700 flex items-center gap-2">
                 <Tag size={16} className="text-amber-500" />
@@ -512,10 +512,10 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 className="w-full p-3 px-4 outline-none border border-slate-200 rounded-lg resize-none focus:ring-2 focus:ring-indigo-100 bg-slate-50 placeholder:text-slate-400"
               />
             </label>
-          )}
+          )} */}
 
           {/* MRP (optional) */}
-          {(showMrp || isEditMode) && (
+          {/* {(showMrp || isEditMode) && (
             <label className="flex flex-col gap-2 max-w-xs">
               <span className="font-medium text-slate-700 flex items-center gap-2">
                 <IndianRupee size={16} className="text-red-500" />
@@ -530,10 +530,10 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 />
               </div>
             </label>
-          )}
+          )} */}
 
           {/* Images (optional) */}
-          {(showImages || isEditMode) && (
+          {/* {(showImages || isEditMode) && (
             <div>
               <p className="font-medium text-slate-700 flex items-center gap-2 mb-3">
                 <UploadCloud size={16} className="text-indigo-500" />
@@ -569,7 +569,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
               </label>
             </div>
-          )}
+          )} */}
 
           {/* ── SIZES & VARIANTS ──────────────────────────────── */}
           <div>
@@ -662,7 +662,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
           </div>
 
           {/* Key Features (optional) */}
-          {(showKeyFeatures || isEditMode) && (
+          {/* {(showKeyFeatures || isEditMode) && (
             <div>
               <p className="font-medium text-slate-700 flex items-center gap-2 mb-3">
                 <Zap size={16} className="text-yellow-500" />
@@ -689,10 +689,10 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 <Plus size={15} /> Add Feature
               </button>
             </div>
-          )}
+          )} */}
 
           {/* Categories (optional) */}
-          {(showCategories || isEditMode) && (
+          {/* {(showCategories || isEditMode) && (
             <div>
               <p className="font-medium text-slate-700 flex items-center gap-2 mb-3">
                 <Package size={16} className="text-blue-500" />
@@ -724,7 +724,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 </div>
               )}
             </div>
-          )}
+          )} */}
 
           {/* Optional sections toggle bar (only in add mode) */}
           {/* {!isEditMode && (

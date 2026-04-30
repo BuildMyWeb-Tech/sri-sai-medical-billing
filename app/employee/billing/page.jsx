@@ -1137,7 +1137,7 @@ changeAmount: changeAmt,
           step="0.01"
           value={paidAmount}
           onChange={(e) => setPaidAmount(e.target.value)}
-          placeholder={grandTotal > 0 ? grandTotal.toFixed(2) : '0.00'}
+          placeholder={'0.00'}
           className="w-28 text-right text-sm font-semibold border-2 border-green-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
         />
       </div>
@@ -1403,7 +1403,7 @@ changeAmount: changeAmt,
           </div>
         </div>
       )}
-      
+
       {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
       {sizePickerModal && (
         <SizePickerModal product={sizePickerModal}

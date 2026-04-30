@@ -132,7 +132,7 @@ function InlineVariants({ variants, onVariantSave, lowStockThreshold }) {
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Size</th>
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Price</th>
             <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide">Stock</th>
-            <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide hidden sm:table-cell">Status</th>
+            {/* <th className="text-left px-3 py-1.5 font-semibold text-slate-400 uppercase tracking-wide hidden sm:table-cell">Status</th> */}
           </tr>
         </thead>
         <tbody>
@@ -149,11 +149,11 @@ function InlineVariants({ variants, onVariantSave, lowStockThreshold }) {
               <td className="px-3 py-2">
                 <VariantStockEdit variant={v} lowStockThreshold={lowStockThreshold} onSave={onVariantSave} />
               </td>
-              <td className="px-3 py-2 hidden sm:table-cell">
+              {/* <td className="px-3 py-2 hidden sm:table-cell">
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v.stock === 0 ? 'bg-red-50 text-red-600' : v.stock < lowStockThreshold ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
                   {v.stock === 0 ? 'Out' : v.stock < lowStockThreshold ? 'Low' : 'OK'}
                 </span>
-              </td>
+              </td> */}
             </tr>
           ))}
         </tbody>
@@ -197,7 +197,7 @@ function ProductRow({ product, onDelete, onVariantUpdate, lowStockThreshold, rou
           )}
           <div className="flex-1 min-w-0">
             <p className="font-medium text-slate-800 text-sm line-clamp-1">{product.name}</p>
-            <p className="text-xs text-slate-400 mt-0.5">MRP ₹{product.mrp.toLocaleString('en-IN')}</p>
+            {/* <p className="text-xs text-slate-400 mt-0.5">MRP ₹{product.mrp.toLocaleString('en-IN')}</p> */}
             {/* Inline variants always shown */}
             <InlineVariants
               variants={variants}
@@ -220,12 +220,12 @@ function ProductRow({ product, onDelete, onVariantUpdate, lowStockThreshold, rou
       </td>
 
       {/* Status */}
-      <td className="px-4 py-4 whitespace-nowrap">
+      {/* <td className="px-4 py-4 whitespace-nowrap">
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${product.inStock ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
           <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${product.inStock ? 'bg-green-500' : 'bg-red-500'}`} />
           {product.inStock ? 'Active' : 'Inactive'}
         </span>
-      </td>
+      </td> */}
 
       {/* Actions */}
       <td className="px-4 py-4 whitespace-nowrap">
@@ -615,7 +615,7 @@ export default function ManageProductPage() {
                   <tr className="border-b border-slate-100 bg-slate-50">
                     <th className="text-left px-5 py-4 font-medium text-slate-500">Product &amp; Variants</th>
                     <th className="text-left px-4 py-4 font-medium text-slate-500">Total Stock</th>
-                    <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th>
+                    {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Satus</th> */}
                     <th className="text-left px-4 py-4 font-medium text-slate-500">Actions</th>
                   </tr>
                 </thead>
@@ -642,7 +642,7 @@ export default function ManageProductPage() {
                     <tr className="border-b border-slate-100 bg-slate-50">
                       <th className="text-left px-5 py-4 font-medium text-slate-500">Product &amp; Variants</th>
                       <th className="text-left px-4 py-4 font-medium text-slate-500">Total Stock</th>
-                      <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th>
+                      {/* <th className="text-left px-4 py-4 font-medium text-slate-500">Status</th> */}
                       <th className="text-left px-4 py-4 font-medium text-slate-500">Actions</th>
                     </tr>
                   </thead>

@@ -31,7 +31,6 @@ import {
   searchProducts,
   findVariantByBarcode,
   findVariantByBarcodeSync as findByBarcodeLocal,
-  patchLocalStock,
 } from '@/lib/pos/productCache';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
@@ -642,12 +641,34 @@ if (data.settings) {
   };
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
+// ── Init ──────────────────────────────────────────────────────────────────
+useEffect(() => {
+  // ── ✅ Permission check (RUN FIRST - sync) ─────────────────────────────
+  const empRaw =
+    localStorage.getItem('empData') ||
+    localStorage.getItem('employeeData');
+
+  if (empRaw) {
+    try {
+      const emp = JSON.parse(empRaw);
+      setEmployee(emp);
+      setHasPermission(
+        emp?.role === 'STORE_OWNER' ||
+        emp?.permissions?.billing === true
+      );
+    } catch {
+      setHasPermission(false);
+    }
+  } else {
+    setHasPermission(false);
+  }
+  // ───────────────────────────────────────────────────────────────────────
+
   const init = async () => {
     try {
       const token = getEmpToken();
 
-      // ✅ Load settings (if employee uses store settings)
+      // ✅ Load settings
       fetch('/api/store/settings', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -688,11 +709,11 @@ if (data.settings) {
   // ✅ Load local DB
   refreshQueueCount();
 
-  idbGetAll(EMP_LOCAL).then((b) =>
+  idbGetAll(STORE_LOCAL).then((b) =>
     setLocalBills(b.sort((a, b2) => b2.createdAt - a.createdAt))
   );
 
-  idbGetAll(EMP_QUEUE).then((q) =>
+  idbGetAll(STORE_QUEUE).then((q) =>
     setQueueBillIds(new Set(q.map((b) => b.localId)))
   );
 
@@ -705,33 +726,37 @@ if (data.settings) {
   setPrinterName(savedPrinter);
   initQZConnection();
 
-  // ✅ Background sync (existing)
+  // ✅ Background sync
   const bgSync = setInterval(() => {
     if (navigator.onLine) runSync();
   }, 15000);
 
-  // Poll product cache every 2 minutes to catch newly added products
-const productPoll = setInterval(() => {
-  if (navigator.onLine) {
-    const t = getEmpToken();
-    initProductCache({
-      storeId: 'default',
-      token: t,
-      forceRefresh: true,
-      onRefresh: (fresh) => { if (fresh?.length) setLocalProducts(fresh); },
-    }).catch(console.error);
-  }
-}, 2 * 60 * 1000);
+  // ✅ 🔥 Poll product cache every 2 minutes
+  const productPoll = setInterval(() => {
+    if (navigator.onLine) {
+      const t = getEmpToken();
+      initProductCache({
+        storeId: 'default',
+        token: t,
+        forceRefresh: true,
+        onRefresh: (fresh) => {
+          if (fresh?.length) setLocalProducts(fresh);
+        },
+      }).catch(console.error);
+    }
+  }, 2 * 60 * 1000);
 
-return () => {
-  window.removeEventListener('online', onOnline);
-  window.removeEventListener('offline', onOffline);
-  document.removeEventListener('fullscreenchange', onFS);
-  clearTimeout(syncTimerRef.current);
-  clearTimeout(feedbackTimer.current);
-  clearInterval(bgSync);
-  clearInterval(productPoll); // ← add this
-};
+  return () => {
+    window.removeEventListener('online', onOnline);
+    window.removeEventListener('offline', onOffline);
+    document.removeEventListener('fullscreenchange', onFS);
+
+    clearTimeout(syncTimerRef.current);
+    clearTimeout(feedbackTimer.current);
+
+    clearInterval(bgSync);
+    clearInterval(productPoll);
+  };
 }, []); // eslint-disable-line
 
   const initQZConnection = async () => { setQzStatus('connecting'); const r = await connectQZ(); setQzStatus(r.ok ? 'connected' : 'disconnected'); };
@@ -944,7 +969,6 @@ changeAmount: changeAmt,
       setSuccessBill(billData);
       await refreshQueueCount();
 // ← FIX: immediately patch in-memory cache so next scan shows correct stock
-patchLocalStock(cartItems.map(({ variantId, quantity }) => ({ variantId, quantity })));
 clearCart();
 // Force refresh product cache so next bill shows correct stock
 if (navigator.onLine) {

@@ -1051,7 +1051,6 @@ if (!found || !found.product || !found.variant) {
       setSuccessBill(billData);
       await refreshQueueCount();
 // ← FIX: immediately patch in-memory cache so next scan shows correct stock
-patchLocalStock(cartItems.map(({ variantId, quantity }) => ({ variantId, quantity })));
 clearCart();
 // Force refresh product cache so next bill shows correct stock
 if (navigator.onLine) {

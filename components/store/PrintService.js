@@ -209,15 +209,19 @@ function browserPrintFallback(bill, s = {}) {
     *{margin:0;padding:0;box-sizing:border-box;}
     @page{size:80mm auto;margin:0;}
 
-    body{
-      width:74mm;
-      margin:0 auto;
-      padding:2mm;
-      font-family:Arial;
-      font-size:12px;
-      font-weight:600;
-      line-height:1.2;
-    }
+  body{
+    width:72mm;
+    margin:0 auto;
+    padding:2mm 2mm 2mm 4mm; /* LEFT SHIFT */
+    font-family:Arial;
+    font-size:12px;
+    font-weight:600;
+    line-height:1.25;
+  }
+
+  table{
+  margin-left:1mm;
+  }
 
     h2{text-align:center;font-size:16px;margin-bottom:2px;}
     .d{border-top:1px dashed #000;margin:4px 0;}

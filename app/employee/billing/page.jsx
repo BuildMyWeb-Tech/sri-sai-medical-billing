@@ -268,108 +268,70 @@ html,body{
   margin:0;
   padding:0;
   background:#fff;
-  color:#000;
 }
 
 body{
   font-family:Arial,Helvetica,sans-serif;
   font-size:11.5px;
   font-weight:600;
-  line-height:1.25;
-  -webkit-print-color-adjust:exact;
+  line-height:1.3;
 }
 
-/* ===== RECEIPT ===== */
+/* 🔥 FIXED RECEIPT */
 .receipt{
-  width:74mm;
+  width:72mm;
   margin:0 auto;
-  padding:2mm 0;
+  padding:4mm 2mm 5mm 4mm; /* LEFT PUSH */
 }
 
-/* ===== HEADER ===== */
+/* HEADER */
 .store-name{
   text-align:center;
   font-size:16px;
   font-weight:900;
   margin-bottom:1mm;
-  text-transform:uppercase;
 }
 
-.store-address{
+.store-address,.store-gst{
   text-align:center;
   font-size:10px;
-  margin-bottom:0.8mm;
-}
-
-.store-gst{
-  text-align:center;
-  font-size:10px;
-  font-weight:700;
   margin-bottom:1mm;
 }
 
-/* ===== DIVIDER ===== */
-.divider{
-  border-top:1px dashed #000;
-  margin:1.2mm 0;
-}
+/* DIVIDER */
+.div{border-top:1px dashed #000;margin:3px 0;}
 
-/* ===== META ===== */
-.meta{
-  font-size:10.5px;
-  line-height:1.35;
-}
+/* META */
+.meta{font-size:10.5px;margin:2px 0;}
 
-.meta .bill-no{
-  font-weight:800;
-}
+/* TABLE */
+table{width:100%;border-collapse:collapse;margin-left:1mm;}
 
-/* ===== TABLE ===== */
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-thead th{
-  font-size:10.5px;
-  font-weight:800;
-  padding:1mm 0;
+th{
+  font-size:10px;
+  text-align:left;
   border-bottom:1px solid #000;
 }
 
-tbody td{
-  padding:1.2mm 0;
+td{
   font-size:11px;
+  padding:2px 0;
 }
 
-td.item{font-weight:700;text-align:left;}
-td.qty{text-align:center;}
-td.rate{text-align:right;}
-td.amt{text-align:right;font-weight:700;}
+td:last-child{text-align:right;font-weight:700;}
 
-/* ===== SUMMARY ===== */
-.summary td{
-  padding:0.8mm 0;
-  font-size:10.5px;
-}
-
-.subtotal td{
-  font-weight:700;
-  padding:1mm 0;
-}
-
-/* ===== TOTAL ===== */
 .total td{
-  font-size:15px;
+  font-size:14px;
   font-weight:900;
-  padding:1.2mm 0 0.8mm;
+  border-top:2px solid #000;
+  padding-top:3px;
 }
 
-/* ===== FOOTER ===== */
+/* FOOTER */
 .footer{
   text-align:center;
-  font-size:10.5px;
-  margin-top:1.5mm;
+  margin-top:4px;
+  font-size:11px;
 }
 </style>
 </head>
@@ -378,62 +340,47 @@ td.amt{text-align:right;font-weight:700;}
 
 <div class="receipt">
 
-${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
+${s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
 ${s.address ? `<div class="store-address">${s.address}</div>` : ''}
-${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}
+${s.gstNumber ? `<div class="store-gst">GST: ${s.gstNumber}</div>` : ''}
 
-<div class="divider"></div>
+<div class="div"></div>
 
-<div class="meta">
-  <div class="bill-no">Bill No : ${bill.billNumber}</div>
-  <div>Date : ${dateStr}</div>
-  <div>Payment : ${bill.paymentMode}</div>
-  ${bill.note ? `<div>Note : ${String(bill.note).slice(0, 42)}</div>` : ''}
-</div>
+<div class="meta"><b>${bill.billNumber}</b></div>
+<div class="meta">${dateStr}</div>
+<div class="meta">Payment: ${bill.paymentMode}</div>
 
-<div class="divider"></div>
+<div class="div"></div>
 
 <table>
 <thead>
 <tr>
-<th class="item">Item</th>
-<th class="qty">Qty</th>
-<th class="rate">Rate</th>
-<th class="amt">Amt</th>
+<th>Item</th>
+<th style="text-align:center">Qty</th>
+<th style="text-align:right">Rate</th>
+<th style="text-align:right">Amt</th>
 </tr>
 </thead>
 
-<tbody>
-${itemRows}
-</tbody>
-</table>
+<tbody>${itemRows}</tbody>
 
-<div class="divider"></div>
-
-<table class="summary">
-<tr class="subtotal">
+<tfoot>
+<tr>
 <td colspan="3">Subtotal</td>
-<td class="amt">${fmtN(bill.subtotal)}</td>
+<td>${fmtN(bill.subtotal)}</td>
 </tr>
 
 ${discountRow}
 ${taxRows}
-</table>
 
-<div class="divider"></div>
-
-<table class="total">
-<tr>
-<td>TOTAL</td>
-<td class="amt">${fmtN(bill.total)}</td>
+<tr class="total">
+<td colspan="3">TOTAL</td>
+<td>${fmtN(bill.total)}</td>
 </tr>
+</tfoot>
 </table>
 
-<div class="divider"></div>
-
-<div class="footer">
-${s.footerMessage || 'Thank You! Visit Again'}
-</div>
+<div class="footer">${s.footerMessage || 'Thank You!'}</div>
 
 </div>
 

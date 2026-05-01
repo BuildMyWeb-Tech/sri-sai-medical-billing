@@ -270,90 +270,44 @@ const html = `<!DOCTYPE html>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
+
 @page{size:80mm auto;margin:0;}
 
-html,body{
+body{
   width:80mm;
   margin:0;
-  padding:0;
-}
-
-body{
-  font-family:Arial,Helvetica,sans-serif;
+  font-family:Arial;
   font-size:11.5px;
   font-weight:600;
-  line-height:1.25;
+  line-height:1.3;
 }
 
-/* SAME BASE STYLE */
 .receipt{
-  width:74mm;
+  width:72mm;
   margin:0 auto;
-  padding:2mm 0;
+  padding:4mm 2mm 5mm 4mm; /* LEFT FIX */
 }
 
-.store-name{
-  text-align:center;
-  font-size:16px;
-  font-weight:900;
-  margin-bottom:1mm;
-}
+.store-name{text-align:center;font-size:16px;font-weight:900;}
+.store-address,.store-gst{text-align:center;font-size:10px;}
 
-.store-address{
-  text-align:center;
-  font-size:10px;
-  margin-bottom:0.8mm;
-}
+.div{border-top:1px dashed #000;margin:3px 0;}
 
-.store-gst{
-  text-align:center;
-  font-size:10px;
-  font-weight:700;
-  margin-bottom:1mm;
-}
+.meta{font-size:10.5px;margin:2px 0;}
 
-.divider{
-  border-top:1px dashed #000;
-  margin:1.2mm 0;
-}
+table{width:100%;border-collapse:collapse;margin-left:1mm;}
 
-.meta{
-  font-size:10.5px;
-  line-height:1.35;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-thead th{
-  font-size:10.5px;
-  padding:1mm 0;
-  border-bottom:1px solid #000;
-}
-
-tbody td{
-  padding:1.2mm 0;
-}
-
-td.amt{text-align:right;font-weight:700;}
-
-.summary td{
-  padding:0.8mm 0;
-}
+th{border-bottom:1px solid #000;font-size:10px;}
+td{padding:2px 0;font-size:11px;}
+td:last-child{text-align:right;font-weight:700;}
 
 .total td{
-  font-size:15px;
+  font-size:14px;
   font-weight:900;
-  padding:1.2mm 0;
+  border-top:2px solid #000;
 }
 
-.footer{
-  text-align:center;
-  font-size:10.5px;
-  margin-top:1.5mm;
-}
+.footer{text-align:center;margin-top:4px;}
 </style>
 </head>
 
@@ -361,61 +315,49 @@ td.amt{text-align:right;font-weight:700;}
 
 <div class="receipt">
 
-${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
+${s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
 ${s.address ? `<div class="store-address">${s.address}</div>` : ''}
-${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}
+${s.gstNumber ? `<div class="store-gst">GST: ${s.gstNumber}</div>` : ''}
 
-<div class="divider"></div>
+<div class="div"></div>
 
-<div class="meta">
-<div><strong>Bill No :</strong> ${bill.billNumber}</div>
-<div>Date : ${dateStr}</div>
-<div>Payment : ${bill.paymentMode}</div>
-</div>
+<div class="meta"><b>${bill.billNumber}</b></div>
+<div class="meta">${dateStr}</div>
+<div class="meta">Payment: ${bill.paymentMode}</div>
 
-<div class="divider"></div>
+<div class="div"></div>
 
 <table>
 <thead>
 <tr>
 <th>Item</th>
-<th>Qty</th>
-<th>Rate</th>
-<th>Amt</th>
+<th style="text-align:center">Qty</th>
+<th style="text-align:right">Rate</th>
+<th style="text-align:right">Amt</th>
 </tr>
 </thead>
-<tbody>
-${itemRows}
-</tbody>
-</table>
 
-<div class="divider"></div>
+<tbody>${itemRows}</tbody>
 
-<table class="summary">
+<tfoot>
 <tr>
 <td colspan="3">Subtotal</td>
-<td class="amt">${fmtN(bill.subtotal)}</td>
+<td>${fmtN(bill.subtotal)}</td>
 </tr>
 
 ${discountRow}
 ${taxRows}
-${cashChangeRows || ''}
-</table>
 
-<div class="divider"></div>
-
-<table class="total">
-<tr>
-<td>TOTAL</td>
-<td class="amt">${fmtN(bill.total)}</td>
+<tr class="total">
+<td colspan="3">TOTAL</td>
+<td>${fmtN(bill.total)}</td>
 </tr>
+
+${cashChangeRows || ''}
+</tfoot>
 </table>
 
-<div class="divider"></div>
-
-<div class="footer">
-${s.footerMessage || 'Thank You! Visit Again'}
-</div>
+<div class="footer">${s.footerMessage || 'Thank You!'}</div>
 
 </div>
 

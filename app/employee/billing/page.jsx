@@ -252,7 +252,200 @@ function browserPrintFallback(bill, settings = {}) {
     taxRows = `<tr class="summary-row"><td colspan="3">Tax (${s.taxPercent || 0}%)</td><td class="col-amt">${fmtN(bill.taxAmount)}</td></tr>`;
   }
   const discountRow = parseFloat(bill.discount) > 0 ? `<tr class="summary-row"><td colspan="3">Discount</td><td class="col-amt">-${fmtN(bill.discount)}</td></tr>` : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${bill.billNumber}</title><style>*{margin:0;padding:0;box-sizing:border-box;}@page{size:80mm auto;margin:0mm;}html,body{width:80mm;margin:0;padding:0;background:#fff;color:#000;}body{font-family:Arial,Helvetica,'Liberation Sans',sans-serif;font-size:11.5px;font-weight:500;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.receipt{width:76mm;margin:0 auto;padding:4mm 0 6mm 0;}.store-name{text-align:center;font-size:17px;font-weight:900;letter-spacing:0.5px;margin-bottom:1.5mm;text-transform:uppercase;}.store-address{text-align:center;font-size:10px;font-weight:600;line-height:1.4;margin-bottom:1mm;}.store-gst{text-align:center;font-size:10px;font-weight:700;margin-bottom:1.5mm;}.divider-dash{border:none;border-top:1.5px dashed #000;margin:2mm 0;}.divider-solid{border:none;border-top:2px solid #000;margin:2mm 0;}.divider-double{border:none;border-top:3px double #000;margin:2mm 0;}.meta-block{font-size:10.5px;font-weight:600;line-height:1.6;}.meta-block .bill-no{font-size:11px;font-weight:800;}table{width:100%;border-collapse:collapse;table-layout:fixed;}thead tr{border-bottom:1.5px solid #000;}thead th{font-size:10.5px;font-weight:800;padding:1.5mm 0;text-transform:uppercase;}th.col-item{text-align:left;width:44%;}th.col-qty{text-align:center;width:10%;}th.col-rate{text-align:right;width:23%;}th.col-amt{text-align:right;width:23%;}tbody tr{border-bottom:0.75px dashed #555;}tbody tr:last-child{border-bottom:none;}tbody td{font-size:11px;font-weight:600;padding:2mm 0;vertical-align:top;}td.item-name{text-align:left;word-break:break-word;padding-right:2mm;font-weight:700;}td.col-qty{text-align:center;}td.col-rate{text-align:right;}td.col-amt{text-align:right;font-weight:700;}.summary-section{width:100%;border-collapse:collapse;margin-top:1mm;}.summary-row td{font-size:10.5px;font-weight:600;padding:1mm 0;}.summary-row td:first-child{text-align:left;}.summary-row td.col-amt{text-align:right;font-weight:700;}.subtotal-row td{font-size:11px;font-weight:700;padding:1.5mm 0;}.subtotal-row td:first-child{text-align:left;}.subtotal-row td.col-amt{text-align:right;}.total-row{width:100%;border-collapse:collapse;}.total-row td{font-size:15px;font-weight:900;padding:2mm 0 1mm 0;letter-spacing:0.3px;}.total-row td:first-child{text-align:left;}.total-row td:last-child{text-align:right;}.footer{text-align:center;font-size:10.5px;font-weight:700;margin-top:3mm;letter-spacing:0.3px;}</style></head><body><div class="receipt">${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}${s.address ? `<div class="store-address">${s.address}</div>` : ''}${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}<hr class="divider-dash"><div class="meta-block"><div class="bill-no">Bill No : ${bill.billNumber}</div><div>Date    : ${dateStr}</div><div>Payment : ${bill.paymentMode}</div>${bill.note ? `<div>Note    : ${String(bill.note).slice(0, 42)}</div>` : ''}</div><hr class="divider-dash"><table><thead><tr><th class="col-item">Item</th><th class="col-qty">Qty</th><th class="col-rate">Rate</th><th class="col-amt">Amt</th></tr></thead><tbody>${itemRows}</tbody></table><hr class="divider-solid"><table class="summary-section"><tr class="subtotal-row"><td colspan="3">Subtotal</td><td class="col-amt">${fmtN(bill.subtotal)}</td></tr>${discountRow}${taxRows}</table><hr class="divider-double"><table class="total-row"><tr><td>TOTAL</td><td>${fmtN(bill.total)}</td></tr></table><hr class="divider-dash"><div class="footer">${s.footerMessage || 'Thank You! Visit Again'}</div></div><script>window.onload=function(){window.print();setTimeout(function(){window.close();},700);};<\/script></body></html>`;
+const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${bill.billNumber}</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+
+@page{size:80mm auto;margin:0;}
+
+html,body{
+  width:80mm;
+  margin:0;
+  padding:0;
+  background:#fff;
+  color:#000;
+}
+
+body{
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:11.5px;
+  font-weight:600;
+  line-height:1.25;
+  -webkit-print-color-adjust:exact;
+}
+
+/* ===== RECEIPT ===== */
+.receipt{
+  width:74mm;
+  margin:0 auto;
+  padding:2mm 0;
+}
+
+/* ===== HEADER ===== */
+.store-name{
+  text-align:center;
+  font-size:16px;
+  font-weight:900;
+  margin-bottom:1mm;
+  text-transform:uppercase;
+}
+
+.store-address{
+  text-align:center;
+  font-size:10px;
+  margin-bottom:0.8mm;
+}
+
+.store-gst{
+  text-align:center;
+  font-size:10px;
+  font-weight:700;
+  margin-bottom:1mm;
+}
+
+/* ===== DIVIDER ===== */
+.divider{
+  border-top:1px dashed #000;
+  margin:1.2mm 0;
+}
+
+/* ===== META ===== */
+.meta{
+  font-size:10.5px;
+  line-height:1.35;
+}
+
+.meta .bill-no{
+  font-weight:800;
+}
+
+/* ===== TABLE ===== */
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+thead th{
+  font-size:10.5px;
+  font-weight:800;
+  padding:1mm 0;
+  border-bottom:1px solid #000;
+}
+
+tbody td{
+  padding:1.2mm 0;
+  font-size:11px;
+}
+
+td.item{font-weight:700;text-align:left;}
+td.qty{text-align:center;}
+td.rate{text-align:right;}
+td.amt{text-align:right;font-weight:700;}
+
+/* ===== SUMMARY ===== */
+.summary td{
+  padding:0.8mm 0;
+  font-size:10.5px;
+}
+
+.subtotal td{
+  font-weight:700;
+  padding:1mm 0;
+}
+
+/* ===== TOTAL ===== */
+.total td{
+  font-size:15px;
+  font-weight:900;
+  padding:1.2mm 0 0.8mm;
+}
+
+/* ===== FOOTER ===== */
+.footer{
+  text-align:center;
+  font-size:10.5px;
+  margin-top:1.5mm;
+}
+</style>
+</head>
+
+<body>
+
+<div class="receipt">
+
+${s.showStoreName !== false && s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
+${s.address ? `<div class="store-address">${s.address}</div>` : ''}
+${s.showGST && s.gstNumber ? `<div class="store-gst">GSTIN: ${s.gstNumber}</div>` : ''}
+
+<div class="divider"></div>
+
+<div class="meta">
+  <div class="bill-no">Bill No : ${bill.billNumber}</div>
+  <div>Date : ${dateStr}</div>
+  <div>Payment : ${bill.paymentMode}</div>
+  ${bill.note ? `<div>Note : ${String(bill.note).slice(0, 42)}</div>` : ''}
+</div>
+
+<div class="divider"></div>
+
+<table>
+<thead>
+<tr>
+<th class="item">Item</th>
+<th class="qty">Qty</th>
+<th class="rate">Rate</th>
+<th class="amt">Amt</th>
+</tr>
+</thead>
+
+<tbody>
+${itemRows}
+</tbody>
+</table>
+
+<div class="divider"></div>
+
+<table class="summary">
+<tr class="subtotal">
+<td colspan="3">Subtotal</td>
+<td class="amt">${fmtN(bill.subtotal)}</td>
+</tr>
+
+${discountRow}
+${taxRows}
+</table>
+
+<div class="divider"></div>
+
+<table class="total">
+<tr>
+<td>TOTAL</td>
+<td class="amt">${fmtN(bill.total)}</td>
+</tr>
+</table>
+
+<div class="divider"></div>
+
+<div class="footer">
+${s.footerMessage || 'Thank You! Visit Again'}
+</div>
+
+</div>
+
+<script>
+window.onload=function(){
+  window.print();
+  setTimeout(()=>window.close(),600);
+};
+</script>
+
+</body>
+</html>`;
   const win = window.open('', '_blank', 'width=380,height=680');
   if (win) { win.document.write(html); win.document.close(); }
 }

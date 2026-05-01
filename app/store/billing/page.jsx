@@ -10,11 +10,13 @@ import {
   AlertTriangle, ScanLine, Settings, Plug, PlugZap,
   CheckSquare, Square, Store, Layers,
 } from 'lucide-react';
-import { calculateTax, formatCurrency } from '@/lib/storeSettings';
+import { calculateTax, formatCurrency, invalidateSettingsCache } from '@/lib/storeSettings';
 import {
   initProductCache,
   searchProducts,
+  findVariantByBarcode,
   findVariantByBarcodeSync as findByBarcodeLocal,
+  patchLocalStock,
 } from '@/lib/pos/productCache';
 import ModalWrapper from '@/components/ui/ModalWrapper';
 
@@ -326,8 +328,9 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
   const [value, setValue]           = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIdx, setActiveIdx]   = useState(-1);
-  const scanTimer  = useRef(null);
-  const lockRef    = useRef(null);
+const scanTimer      = useRef(null);
+const lockRef        = useRef(null);
+const lastKeyTimeRef = useRef(0);
 
   const tryFocus = useCallback(() => {
     if (disabled) return;
@@ -357,25 +360,29 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
     setActiveIdx(-1);
   }, [searchResults, value]);
 
-  const handleChange = (e) => {
-    const v = e.target.value;
-    setValue(v);
-    clearTimeout(scanTimer.current);
-    scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 80);
-  };
+ const handleChange = (e) => {
+  const v = e.target.value;
+  setValue(v);
+  lastKeyTimeRef.current = Date.now();
+  clearTimeout(scanTimer.current);
+  scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 80);
+};
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const v = value.trim();
-      if (!v) return;
-      if (showDropdown && searchResults?.length > 0) {
-        const idx = activeIdx >= 0 ? activeIdx : 0;
-        if (searchResults[idx]) { onSelectProduct(searchResults[idx]); setValue(''); setShowDropdown(false); return; }
-      }
-      onScan(v.replace(/\s+/g, ''));
-      setValue(''); setShowDropdown(false);
-    } else if (e.key === 'ArrowDown') {
+   if (e.key === 'Enter') {
+  e.preventDefault();
+  const v = value.trim();
+  if (!v) return;
+  // Only use dropdown if user explicitly navigated it (activeIdx set) AND it's not a fast scanner input
+  const msSinceLastKey = Date.now() - lastKeyTimeRef.current;
+  const isScanner = msSinceLastKey < 80; // scanner types instantly
+  if (!isScanner && activeIdx >= 0 && showDropdown && searchResults?.length > 0) {
+    if (searchResults[activeIdx]) { onSelectProduct(searchResults[activeIdx]); setValue(''); setShowDropdown(false); return; }
+  }
+  onScan(v.replace(/\s+/g, ''));
+  setValue(''); setShowDropdown(false);
+}
+    else if (e.key === 'ArrowDown') {
       e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0));
@@ -705,10 +712,16 @@ const [paidAmount, setPaidAmount]           = useState('');
       const res = await fetch('/api/store/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ taxPercent: val, taxType: 'SINGLE' }),
+        body: JSON.stringify({
+  taxPercent: val,
+  taxType: settings?.taxType || 'SINGLE', // preserve existing tax type
+}),
       });
-      const data = await res.json();
-      if (data.settings) setSettings(data.settings);
+     const data = await res.json();
+if (data.settings) {
+  setSettings(data.settings);
+  invalidateSettingsCache(); // force next getStoreSettings() to re-fetch fresh
+}
     } catch (e) { console.error('Tax save failed:', e); }
     finally { setSavingTax(false); setEditingTax(false); }
   };
@@ -728,10 +741,11 @@ useEffect(() => {
         .then((d) => setSettings(d.settings || null))
         .catch(console.error);
 
-      // ✅ Initialize product cache (NEW SYSTEM)
+      // ✅ Initialize product cache
       await initProductCache({
         storeId: STORE_ID,
         token,
+        forceRefresh: true,
         onRefresh: () => {
           console.log('🔄 Products refreshed in background');
         },
@@ -749,7 +763,6 @@ useEffect(() => {
   const onOnline = () => {
     setIsOnline(true);
     triggerSync();
-    // ❌ removed refreshProductCache()
   };
 
   const onOffline = () => setIsOnline(false);
@@ -783,14 +796,28 @@ useEffect(() => {
     if (navigator.onLine) runSync();
   }, 15000);
 
-  return () => {
-    window.removeEventListener('online', onOnline);
-    window.removeEventListener('offline', onOffline);
-    document.removeEventListener('fullscreenchange', onFS);
-    clearTimeout(syncTimerRef.current);
-    clearTimeout(feedbackTimer.current);
-    clearInterval(bgSync);
-  };
+  // ✅ NEW: Product polling (FIX for Bug 5)
+const productPoll = setInterval(() => {
+  if (navigator.onLine) {
+    const t = getStoreToken();
+    initProductCache({
+      storeId: STORE_ID,
+      token: t,
+      forceRefresh: true,
+      onRefresh: () => {},
+    }).catch(console.error);
+  }
+}, 2 * 60 * 1000);
+
+return () => {
+  window.removeEventListener('online', onOnline);
+  window.removeEventListener('offline', onOffline);
+  document.removeEventListener('fullscreenchange', onFS);
+  clearTimeout(syncTimerRef.current);
+  clearTimeout(feedbackTimer.current);
+  clearInterval(bgSync);
+  clearInterval(productPoll); // ← add this
+};
 }, []); // eslint-disable-line
 
   const initQZConnection = async () => {
@@ -893,16 +920,19 @@ useEffect(() => {
   });
 }, [showScanFeedback]);
 
- const handleBarcodeScanned = useCallback((barcode) => {
+const handleBarcodeScanned = useCallback(async (barcode) => {
   if (!barcode) return;
   const trimmed = barcode.trim();
-  const found = findByBarcodeLocal(trimmed);
-
-  if (!found || !found.product || !found.variant) {
+  // Try sync first (O(1)), fall back to async server lookup if cache miss
+  let found = findByBarcodeLocal(trimmed);
+  if (!found) {
+    found = await findVariantByBarcode(trimmed, { storeId: STORE_ID, token: getStoreToken() });
+  }
+if (!found || !found.product || !found.variant) {
     showScanFeedback('error', `Unknown barcode: ${trimmed}`);
     return;
   }
-
+  setSuggestions([]);
   addVariantToCart(found.product, found.variant);
 }, [addVariantToCart, showScanFeedback]);
 
@@ -1020,10 +1050,18 @@ useEffect(() => {
       }
       setSuccessBill(billData);
       await refreshQueueCount();
-      clearCart();
-      setTimeout(() => triggerSync(), 2000);
-      setTimeout(async () => {
-        const result = await printBillAuto(billData, settings, printerName);
+// ← FIX: immediately patch in-memory cache so next scan shows correct stock
+patchLocalStock(cartItems.map(({ variantId, quantity }) => ({ variantId, quantity })));
+clearCart();
+// Force refresh product cache so next bill shows correct stock
+if (navigator.onLine) {
+  const token = getStoreToken();
+  initProductCache({ storeId: STORE_ID, token, forceRefresh: true, onRefresh: () => {} })
+    .catch(console.error);
+}
+setTimeout(() => triggerSync(), 2000);
+setTimeout(async () => {
+  const result = await printBillAuto(billData, settings, printerName);
         setLastPrintMethod(result.method);
       }, 400);
       if (activeTab === 'history') loadHistory(1);
@@ -1083,8 +1121,8 @@ useEffect(() => {
   };
 
   const taxLabel = settings?.taxType === 'GST_SPLIT'
-    ? `GST (CGST ${settings.cgst}% + SGST ${settings.sgst}%)`
-    : `Tax (${settings?.taxPercent || 0}%)`;
+    ? `GST (CGST ${Number(settings.cgst || 0)}% + SGST ${Number(settings.sgst || 0)}%)`
+    : `Tax (${Number(settings?.taxPercent || 0)}%)`;
 
   const qzIndicator = ({
     connected:    { cls: 'bg-green-50 text-green-700 border-green-200',    dot: 'bg-green-500',               label: 'QZ Ready'       },
@@ -1119,24 +1157,24 @@ useEffect(() => {
               ⚡ Offline — {localProducts.length} cached
             </span>
           )} */}
-          <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
+          {/* <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${qzIndicator.dot}`} />
             {qzIndicator.label} <Settings size={11} />
-          </button>
-          {printerName && (
+          </button> */}
+          {/* {printerName && (
             <span className="hidden md:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 px-2 py-1.5 rounded-lg bg-slate-50 max-w-[120px] truncate" title={printerName}>
               <Printer size={10} /> {printerName}
             </span>
-          )}
-          <button onClick={runSync} disabled={syncing || queueCount === 0}
+          )} */}
+          {/* <button onClick={runSync} disabled={syncing || queueCount === 0}
             className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ${queueCount > 0 ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}>
             <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
             {queueCount > 0 ? `${queueCount} unsynced` : 'Synced'}
-          </button>
-          <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg ${isOnline ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}`}>
+          </button> */}
+          {/* <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg ${isOnline ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}`}>
             {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
             {isOnline ? 'Online' : 'Offline'}
-          </div>
+          </div> */}
           <button onClick={toggleFullscreen} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 border border-slate-200">
             {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
           </button>
@@ -1381,10 +1419,10 @@ useEffect(() => {
                   className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 border border-slate-200">
                   <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /> Refresh
                 </button>
-                <button onClick={() => setShowFilters((v) => !v)}
+                {/* <button onClick={() => setShowFilters((v) => !v)}
                   className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${showFilters ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'text-slate-500 border-slate-200 hover:bg-slate-100'}`}>
                   <Filter size={12} /> Filters <ChevronDown size={11} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-                </button>
+                </button> */}
               </div>
             </div>
             <div className="relative">

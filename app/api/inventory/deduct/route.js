@@ -10,7 +10,8 @@ import { NextResponse } from 'next/server';
 // Resolve storeId
 // ─────────────────────────────────────────────
 async function resolveStoreId(request) {
-  const emp = verifyEmployeeToken(request);
+  let emp = null;
+  try { emp = verifyEmployeeToken(request); } catch (_) {}
 
   if (emp?.storeId) {
     if (!hasPermission(emp, 'billing')) {
@@ -49,7 +50,23 @@ export async function POST(request) {
       );
     }
 
-    const { items = [] } = await request.json();
+const { items = [], billId } = await request.json();
+
+// Dedup check — prevent double deduction on retry
+if (billId) {
+  const alreadyDeducted = await prisma.bill.findFirst({
+    where: { storeId, billNumber: billId },
+    select: { id: true },
+  });
+  if (alreadyDeducted) {
+    return NextResponse.json({
+      message: 'Already deducted for this bill',
+      deducted: [],
+      errors: [],
+      skipped: true,
+    });
+  }
+}
 
     if (!items.length) {
       return NextResponse.json({
@@ -78,23 +95,43 @@ export async function POST(request) {
               : item.variantId;
 
           await prisma.$transaction(async (tx) => {
-            const variant = await tx.productVariant.findUnique({
-              where: { id: cleanId },
-              select: {
-                id: true,
-                stock: true,
-                productId: true,
-              },
-            });
+           
 
-            if (!variant) return;
+// Atomic update with WHERE guard — prevents race condition
+// If stock is insufficient, update affects 0 rows → we detect and reject
+const updated = await tx.productVariant.updateMany({
+  where: {
+    id: cleanId,
+    stock: { gte: deductQty }, // only updates if enough stock exists
+  },
+  data: {
+    stock: { decrement: deductQty }, // atomic decrement, no read-then-write
+  },
+});
 
-            const newStock = Math.max(0, variant.stock - deductQty);
+if (updated.count === 0) {
+  // Either variant not found OR stock was insufficient
+  const variant = await tx.productVariant.findUnique({
+    where: { id: cleanId },
+    select: { id: true, stock: true, productId: true },
+  });
+  if (!variant) return;
+  errors.push({
+    item,
+    reason: `Insufficient stock for variant ${cleanId}. Available: ${variant.stock}, Requested: ${deductQty}`,
+  });
+  return;
+}
 
-            await tx.productVariant.update({
-              where: { id: cleanId },
-              data: { stock: newStock },
-            });
+const variant = await tx.productVariant.findUnique({
+  where: { id: cleanId },
+  select: { id: true, stock: true, productId: true },
+});
+
+if (!variant) return;
+const newStock = variant.stock; // already decremented
+
+
 
             const variants = await tx.productVariant.findMany({
               where: { productId: variant.productId },

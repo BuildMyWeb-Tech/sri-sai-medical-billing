@@ -58,28 +58,33 @@ export async function GET(request) {
       });
 
       if (exactVariant) {
-        return NextResponse.json({
-          role,
-          products: [
-            {
-              id: exactVariant.product.id,
-              name: exactVariant.product.name,
-              sku: exactVariant.product.sku,
-              variants: [
-                {
-                  id: exactVariant.id,
-                  size: exactVariant.size,
-                  price: exactVariant.price,
-                  stock: exactVariant.stock,
-                  barcode: exactVariant.barcode,
-                  productId: exactVariant.productId,
-                },
-              ],
-            },
-          ],
-          type: 'BARCODE_MATCH',
-        });
-      }
+  // Fetch ALL variants of this product so cache is fully populated
+  const allVariants = await prisma.productVariant.findMany({
+    where: { productId: exactVariant.productId },
+    select: {
+      id: true,
+      size: true,
+      price: true,
+      stock: true,
+      barcode: true,
+      productId: true,
+    },
+    orderBy: { size: 'asc' },
+  });
+
+  return NextResponse.json({
+    role,
+    products: [
+      {
+        id: exactVariant.product.id,
+        name: exactVariant.product.name,
+        sku: exactVariant.product.sku,
+        variants: allVariants,
+      },
+    ],
+    type: 'BARCODE_MATCH',
+  });
+}
     }
 
     // ⚡ STEP 2: NORMAL SEARCH (NAME / SKU / BARCODE PARTIAL)

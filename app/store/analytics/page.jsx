@@ -391,14 +391,14 @@ export default function StoreSalesReport() {
         <KpiCard title="Total Revenue" value={`₹${(summary?.revenue || 0).toLocaleString('en-IN')}`} sub={`${summary?.orders || 0} transactions`} icon={IndianRupee} color="green" growth={summary?.comparison?.revenue?.growth} loading={loadingSummary} />
         <KpiCard title="Total Orders" value={summary?.orders || 0} sub="in selected period" icon={ShoppingCart} color="blue" growth={summary?.comparison?.orders?.growth} loading={loadingSummary} />
         <KpiCard title="Avg Order Value" value={`₹${(summary?.aov || 0).toLocaleString('en-IN')}`} sub="per transaction" icon={TrendingUp} color="purple" loading={loadingSummary} />
-        <KpiCard
+        {/* <KpiCard
           title="Top Product"
           value={products[0]?.name ? products[0].name.slice(0, 18) + (products[0].name.length > 18 ? '…' : '') : '—'}
           sub={products[0] ? `₹${products[0].revenue.toLocaleString('en-IN')} revenue` : 'No data'}
           icon={Package}
           color="amber"
           loading={loadingProducts}
-        />
+        /> */}
       </div>
 
       {summary?.comparison && <ComparisonBanner data={summary.comparison} />}

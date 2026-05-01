@@ -292,12 +292,12 @@ export default function Dashboard() {
             icon={ShoppingBasket}
             color="blue"
           />
-          <StatCard
+          {/* <StatCard
             title="Total Categories"
             value={dash.totalCategories}
             icon={Layers}
             color="indigo"
-          />
+          /> */}
           
        
         </div>

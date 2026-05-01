@@ -15,7 +15,7 @@ const ALL_LINKS = [
   { name: 'Dashboard',   href: '/employee/dashboard',       icon: HomeIcon,    permission: null        },
   { name: 'Billing',     href: '/employee/billing',         icon: CreditCard,  permission: 'billing'   },
   { name: 'Orders',      href: '/employee/orders',          icon: ShoppingBag, permission: 'orders'    },
-  { name: 'Products',    href: '/employee/manage-product',  icon: SquarePenIcon,     permission: 'inventory' },
+  { name: 'Manage Products',    href: '/employee/manage-product',  icon: SquarePenIcon,     permission: 'inventory' },
   { name: 'Inventory',   href: '/employee/inventory',       icon: Package,     permission: 'inventory' },
   { name: 'Reports',     href: '/employee/reports',         icon: BarChart2,   permission: 'reports'   },
 ];

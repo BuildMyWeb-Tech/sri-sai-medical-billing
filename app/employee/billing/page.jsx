@@ -25,11 +25,13 @@ import {
   ChevronDown, Eye, AlertTriangle, ScanLine, Settings,
   Plug, PlugZap, CheckSquare, Square, Layers,
 } from 'lucide-react';
-import { calculateTax, formatCurrency } from '@/lib/storeSettings';
+import { calculateTax, formatCurrency, invalidateSettingsCache } from '@/lib/storeSettings';
 import {
   initProductCache,
-  searchProducts as localSearch,
+  searchProducts,
+  findVariantByBarcode,
   findVariantByBarcodeSync as findByBarcodeLocal,
+  patchLocalStock,
 } from '@/lib/pos/productCache';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
@@ -319,8 +321,9 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
   const [value, setValue]               = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIdx, setActiveIdx]       = useState(-1);
-  const scanTimer = useRef(null);
-  const lockRef   = useRef(null);
+const scanTimer      = useRef(null);
+const lockRef        = useRef(null);
+const lastKeyTimeRef = useRef(0);
 
   const tryFocus = useCallback(() => {
     if (disabled) return;
@@ -350,21 +353,29 @@ function CombinedInput({ onScan, onSearch, disabled = false, searchResults, onSe
     setActiveIdx(-1);
   }, [searchResults, value]);
 
-  const handleChange = (e) => {
-    const v = e.target.value; setValue(v);
-    clearTimeout(scanTimer.current);
-    scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 80);
-  };
+const handleChange = (e) => {
+  const v = e.target.value;
+  setValue(v);
+  lastKeyTimeRef.current = Date.now();
+  clearTimeout(scanTimer.current);
+  scanTimer.current = setTimeout(() => { if (v.trim()) onSearch(v.trim()); }, 80);
+};
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault(); const v = value.trim(); if (!v) return;
-      if (showDropdown && searchResults?.length > 0) {
-        const idx = activeIdx >= 0 ? activeIdx : 0;
-        if (searchResults[idx]) { onSelectProduct(searchResults[idx]); setValue(''); setShowDropdown(false); return; }
-      }
-      onScan(v); setValue(''); setShowDropdown(false);
-    } else if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1)); }
+  e.preventDefault();
+  const v = value.trim();
+  if (!v) return;
+  // Only use dropdown if user explicitly navigated it (activeIdx set) AND it's not a fast scanner input
+  const msSinceLastKey = Date.now() - lastKeyTimeRef.current;
+  const isScanner = msSinceLastKey < 80; // scanner types instantly
+  if (!isScanner && activeIdx >= 0 && showDropdown && searchResults?.length > 0) {
+    if (searchResults[activeIdx]) { onSelectProduct(searchResults[activeIdx]); setValue(''); setShowDropdown(false); return; }
+  }
+  onScan(v.replace(/\s+/g, ''));
+  setValue(''); setShowDropdown(false);
+}
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, (searchResults?.length || 1) - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
     else if (e.key === 'Escape') { setShowDropdown(false); setValue(''); }
   };
@@ -616,66 +627,112 @@ const [paidAmount, setPaidAmount]             = useState('');
       const res = await fetch('/api/store/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ taxPercent: val, taxType: 'SINGLE' }),
+        body: JSON.stringify({
+  taxPercent: val,
+  taxType: settings?.taxType || 'SINGLE', // preserve existing tax type
+}),
       });
-      const data = await res.json();
-      if (data.settings) setSettings(data.settings);
+     const data = await res.json();
+if (data.settings) {
+  setSettings(data.settings);
+  invalidateSettingsCache(); // force next getStoreSettings() to re-fetch fresh
+}
     } catch (e) { console.error('Tax save failed:', e); }
     finally { setSavingTax(false); setEditingTax(false); }
   };
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const empRaw = localStorage.getItem('empData') || localStorage.getItem('employeeData');
-    if (empRaw) {
-      try {
-        const emp = JSON.parse(empRaw);
-        setEmployee(emp);
-        setHasPermission(emp?.role === 'STORE_OWNER' || emp?.permissions?.billing === true);
-      } catch { setHasPermission(false); }
-    } else { setHasPermission(false); }
+  const init = async () => {
+    try {
+      const token = getEmpToken();
 
-const token = getEmpToken();
-if (token) fetch('/api/store/settings', { headers: { Authorization: `Bearer ${token}` } })
-  .then((r) => r.json()).then((d) => setSettings(d.settings || null)).catch(console.error);
+      // ✅ Load settings (if employee uses store settings)
+      fetch('/api/store/settings', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => setSettings(d.settings || null))
+        .catch(console.error);
 
-const onOnline  = () => { setIsOnline(true); triggerSync(); refreshProductCache(); };
-const onOffline = () => setIsOnline(false);
-window.addEventListener('online', onOnline);
-window.addEventListener('offline', onOffline);
-setIsOnline(navigator.onLine);
+      // ✅ Initial product cache load (force fresh)
+      await initProductCache({
+        storeId: 'default',
+        token,
+        forceRefresh: true,
+        onRefresh: () => {
+          console.log('🔄 Employee products refreshed');
+        },
+      });
 
-refreshQueueCount();
-idbGetAll(STORE_LOCAL).then((bills) => setLocalBills(bills.sort((a, b) => b.createdAt - a.createdAt)));
-idbGetAll(STORE_QUEUE).then((q) => setQueueBillIds(new Set(q.map((b) => b.localId))));
+      console.log('✅ Employee product cache initialized');
+    } catch (err) {
+      console.error('Init failed:', err);
+    }
+  };
 
-const onFS = () => setIsFullscreen(!!document.fullscreenElement);
-document.addEventListener('fullscreenchange', onFS);
+  init();
 
-initProductCache({
-  storeId: 'default',
-  token,
-  onRefresh: () => console.log('🔄 Employee products refreshed'),
-}).then((products) => {
-  if (products?.length) setLocalProducts(products);
-}).catch(console.error);
+  // ✅ Online / Offline handling
+  const onOnline = () => {
+    setIsOnline(true);
+    triggerSync();
+  };
 
-    const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
-    setPrinterName(savedPrinter);
-    initQZConnection();
+  const onOffline = () => setIsOnline(false);
 
-    const bgSync = setInterval(() => { if (navigator.onLine) runSync(); }, 15000);
+  window.addEventListener('online', onOnline);
+  window.addEventListener('offline', onOffline);
+  setIsOnline(navigator.onLine);
 
-    // Single cleanup — no duplicate return
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-      document.removeEventListener('fullscreenchange', onFS);
-      clearTimeout(syncTimerRef.current);
-      clearTimeout(feedbackTimer.current);
-      clearInterval(bgSync);
-    };
-  }, []); // eslint-disable-line
+  // ✅ Load local DB
+  refreshQueueCount();
+
+  idbGetAll(EMP_LOCAL).then((b) =>
+    setLocalBills(b.sort((a, b2) => b2.createdAt - a.createdAt))
+  );
+
+  idbGetAll(EMP_QUEUE).then((q) =>
+    setQueueBillIds(new Set(q.map((b) => b.localId)))
+  );
+
+  // ✅ Fullscreen listener
+  const onFS = () => setIsFullscreen(!!document.fullscreenElement);
+  document.addEventListener('fullscreenchange', onFS);
+
+  // ✅ Printer setup
+  const savedPrinter = localStorage.getItem(LS_PRINTER_NAME) || '';
+  setPrinterName(savedPrinter);
+  initQZConnection();
+
+  // ✅ Background sync (existing)
+  const bgSync = setInterval(() => {
+    if (navigator.onLine) runSync();
+  }, 15000);
+
+  // Poll product cache every 2 minutes to catch newly added products
+const productPoll = setInterval(() => {
+  if (navigator.onLine) {
+    const t = getEmpToken();
+    initProductCache({
+      storeId: 'default',
+      token: t,
+      forceRefresh: true,
+      onRefresh: (fresh) => { if (fresh?.length) setLocalProducts(fresh); },
+    }).catch(console.error);
+  }
+}, 2 * 60 * 1000);
+
+return () => {
+  window.removeEventListener('online', onOnline);
+  window.removeEventListener('offline', onOffline);
+  document.removeEventListener('fullscreenchange', onFS);
+  clearTimeout(syncTimerRef.current);
+  clearTimeout(feedbackTimer.current);
+  clearInterval(bgSync);
+  clearInterval(productPoll); // ← add this
+};
+}, []); // eslint-disable-line
 
   const initQZConnection = async () => { setQzStatus('connecting'); const r = await connectQZ(); setQzStatus(r.ok ? 'connected' : 'disconnected'); };
   const handlePrinterChange = (name) => { setPrinterName(name); try { localStorage.setItem(LS_PRINTER_NAME, name); } catch (_) {} };
@@ -709,13 +766,12 @@ initProductCache({
 };
 
   // ── Search — LOCAL ONLY, instant, no API call during billing ─────────────
-  const handleSearch = useCallback((query) => {
+const handleSearch = useCallback((query) => {
     const q = query.trim();
     if (!q) { setSuggestions([]); return; }
-    // Use in-memory Map index from productCache.js — O(k) prefix, instant
-    const results = localSearch(q, 8);
+    const results = searchProducts(q, 8);
     setSuggestions(results);
-  }, []); // no deps — localSearch reads module-level _memCache
+  }, []);
 
   // ── History ───────────────────────────────────────────────────────────────
   const loadHistory = async (page = 1) => {
@@ -776,19 +832,20 @@ const addVariantToCart = useCallback((product, variant) => {
   }, [showScanFeedback]);
 
   // Barcode scan — O(1) Map lookup via productCache module
-const handleBarcodeScanned = useCallback((barcode) => {
-    if (!barcode) return;
-    const trimmed = barcode.trim();
-    console.log(`[Barcode][EMP] Scanned: "${trimmed}" at ${new Date().toISOString()}`);
-    const found = findByBarcodeLocal(trimmed);
-    if (!found || !found.product || !found.variant) {
-      console.warn(`[Barcode][EMP] ❌ Unknown barcode: "${trimmed}"`);
-      setUnknownBarcodeModal(trimmed); // ✅ show popup instead of just feedback
-      return;
-    }
-    console.log(`[Barcode][EMP] ✅ Found: ${found.product?.name} (${found.variant?.size})`);
-    addVariantToCart(found.product, found.variant);
-  }, [addVariantToCart, showScanFeedback, setUnknownBarcodeModal]);
+const handleBarcodeScanned = useCallback(async (barcode) => {
+  if (!barcode) return;
+  const trimmed = barcode.trim();
+  let found = findByBarcodeLocal(trimmed);
+  if (!found) {
+    found = await findVariantByBarcode(trimmed, { storeId: 'default', token: getEmpToken() });
+  }
+  if (!found || !found.product || !found.variant) {
+    showScanFeedback('error', `Unknown barcode: ${trimmed}`);
+    return;
+  }
+  setSuggestions([]); // clear stale search results before adding
+  addVariantToCart(found.product, found.variant);
+}, [addVariantToCart, showScanFeedback]);
 
   const handleProductSelectedFromSearch = (product) => {
     setSuggestions([]);
@@ -886,9 +943,19 @@ changeAmount: changeAmt,
       }
       setSuccessBill(billData);
       await refreshQueueCount();
-      clearCart();
-      setTimeout(() => triggerSync(), 2000);
-      setTimeout(async () => { const result = await printBillAuto(billData, settings, printerName); setLastPrintMethod(result.method); }, 400);
+// ← FIX: immediately patch in-memory cache so next scan shows correct stock
+patchLocalStock(cartItems.map(({ variantId, quantity }) => ({ variantId, quantity })));
+clearCart();
+// Force refresh product cache so next bill shows correct stock
+if (navigator.onLine) {
+  const token = getEmpToken();
+  initProductCache({ storeId: 'default', token, forceRefresh: true, onRefresh: () => {} })
+    .catch(console.error);
+}
+setTimeout(() => triggerSync(), 2000);
+setTimeout(async () => {
+  const result = await printBillAuto(billData, settings, printerName);
+        setLastPrintMethod(result.method); }, 400);
       if (activeTab === 'history') loadHistory(1);
     } catch (err) { console.error('completeBill error:', err); alert('Failed to save bill. Please try again.'); }
     finally { setLoading(false); }
@@ -937,8 +1004,8 @@ changeAmount: changeAmt,
   };
 
   const taxLabel = settings?.taxType === 'GST_SPLIT'
-    ? `GST (CGST ${settings.cgst}% + SGST ${settings.sgst}%)`
-    : `Tax (${settings?.taxPercent || 0}%)`;
+    ? `GST (CGST ${Number(settings.cgst || 0)}% + SGST ${Number(settings.sgst || 0)}%)`
+    : `Tax (${Number(settings?.taxPercent || 0)}%)`;
 
   const qzIndicator = ({
     connected:    { cls: 'bg-green-50 text-green-700 border-green-200',    dot: 'bg-green-500',               label: 'QZ Ready'       },
@@ -982,13 +1049,13 @@ changeAmount: changeAmt,
             </button>
             <button onClick={() => setActiveTab('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <History size={12} /> History
-              {localBills.length > 0 && <span className="bg-blue-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>}
+            {/*  {localBills.length > 0 && <span className="bg-blue-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>}  */}
             </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-semibold border border-orange-200">⚡ Offline — {localProducts.length} cached</span>}
-          <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
+          {/* {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-lg font-semibold border border-orange-200">⚡ Offline — {localProducts.length} cached</span>} */}
+          {/* <button onClick={() => setShowPrintSettings(true)} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-all ${qzIndicator.cls}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${qzIndicator.dot}`} />
             {qzIndicator.label} <Settings size={11} />
           </button>
@@ -999,7 +1066,7 @@ changeAmount: changeAmt,
           </button>
           <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg ${isOnline ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}`}>
             {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />} {isOnline ? 'Online' : 'Offline'}
-          </div>
+          </div> */}
           <button onClick={toggleFullscreen} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 border border-slate-200">
             {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
           </button>
@@ -1212,9 +1279,9 @@ changeAmount: changeAmt,
                 <button onClick={() => loadHistory(1)} disabled={historyLoading} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 border border-slate-200">
                   <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /> Refresh
                 </button>
-                <button onClick={() => setShowFilters((v) => !v)} className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${showFilters ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-500 border-slate-200 hover:bg-slate-100'}`}>
+                {/* <button onClick={() => setShowFilters((v) => !v)} className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${showFilters ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-500 border-slate-200 hover:bg-slate-100'}`}>
                   <Filter size={12} /> Filters <ChevronDown size={11} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-                </button>
+                </button> */}
               </div>
             </div>
             <div className="relative">

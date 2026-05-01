@@ -34,7 +34,7 @@ const ALL_PERMISSIONS = [
   // { key: 'orders',             label: 'Orders',                   Icon: ClipboardList },
   { key: 'reports',            label: 'Reports',              Icon: BarChart2 },
   { key: 'product_categories', label: 'Categories',                  Icon: Tag },
-  { key: 'manage_product',     label: 'Products',                   Icon: ShoppingBag },
+  { key: 'manage_product',     label: 'Manage Products',                   Icon: ShoppingBag },
 ];
 
 const DEFAULT_PERMS = {

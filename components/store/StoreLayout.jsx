@@ -175,7 +175,7 @@ if (!isLoaded || loading) return <StoreSkeleton />;
         </p>
         <div className="flex flex-col gap-3">
           <Link
-            href="/create-store"
+            href="/store"
             className="bg-gradient-to-r from-green-600 to-green-700 text-white flex items-center justify-center gap-2 py-3 px-6 rounded-lg text-sm font-medium shadow-md hover:from-green-700 hover:to-green-800 transition"
           >
             <LogIn size={16} /> Store / Employee Login

@@ -325,7 +325,7 @@ export default function AdminSalesReport() {
         <KpiCard title="Total Orders"    value={summary?.orders||0}                                    sub="in selected period"                   icon={ShoppingCart} color="blue"   growth={summary?.comparison?.orders?.growth}  loading={loadingSummary} />
         <KpiCard title="Avg Order Value" value={`₹${(summary?.aov||0).toLocaleString('en-IN')}`}      sub="per transaction"                      icon={TrendingUp}   color="purple" loading={loadingSummary} />
         <KpiCard title="Top Store"       value={summary?.topStore?.name || '—'}                        sub={summary?.topStore ? `₹${summary.topStore.revenue.toLocaleString('en-IN')}` : 'No data'} icon={Trophy} color="amber" loading={loadingSummary} />
-        <KpiCard title="Top Product"     value={products[0]?.name ? products[0].name.slice(0,16)+'…' : '—'} sub={products[0] ? `₹${products[0].revenue.toLocaleString('en-IN')}` : 'No data'} icon={Package} color="indigo" loading={loadingProducts} />
+        {/* <KpiCard title="Top Product"     value={products[0]?.name ? products[0].name.slice(0,16)+'…' : '—'} sub={products[0] ? `₹${products[0].revenue.toLocaleString('en-IN')}` : 'No data'} icon={Package} color="indigo" loading={loadingProducts} /> */}
       </div>
 
       {/* Comparison Banners */}

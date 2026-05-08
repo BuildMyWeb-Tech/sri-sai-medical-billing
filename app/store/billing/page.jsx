@@ -269,45 +269,99 @@ const html = `<!DOCTYPE html>
 <title>${bill.billNumber}</title>
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
 
-@page{size:80mm auto;margin:0;}
+@page{
+  size:80mm auto;
+  margin:0;
+}
 
 body{
   width:80mm;
-  margin:0;
-  font-family:Arial;
-  font-size:11.5px;
+  background:#fff;
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:11px;
   font-weight:600;
-  line-height:1.3;
+  line-height:1.25;
 }
 
 .receipt{
   width:72mm;
   margin:0 auto;
-  padding:4mm 2mm 5mm 4mm; /* LEFT FIX */
+  padding:4mm 2mm 5mm 4mm;
 }
 
-.store-name{text-align:center;font-size:16px;font-weight:900;}
-.store-address,.store-gst{text-align:center;font-size:10px;}
+.store-name{
+  text-align:center;
+  font-size:16px;
+  font-weight:900;
+  line-height:1.2;
+  margin-bottom:1mm;
+}
 
-.div{border-top:1px dashed #000;margin:3px 0;}
+.store-address{
+  text-align:center;
+  font-size:9.5px;
+  line-height:1.3;
+}
 
-.meta{font-size:10.5px;margin:2px 0;}
+.store-phone,
+.store-gst{
+  text-align:center;
+  font-size:10px;
+  font-weight:700;
+  margin-top:1mm;
+}
 
-table{width:100%;border-collapse:collapse;margin-left:1mm;}
+.divider{
+  border-top:1px dashed #000;
+  margin:3px 0;
+}
 
-th{border-bottom:1px solid #000;font-size:10px;}
-td{padding:2px 0;font-size:11px;}
-td:last-child{text-align:right;font-weight:700;}
+.meta{
+  font-size:10px;
+  margin:1px 0;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-left:1mm;
+}
+
+th{
+  font-size:10px;
+  border-bottom:1px solid #000;
+  padding:2px 0;
+}
+
+td{
+  font-size:10.5px;
+  padding:2px 0;
+}
+
+td:last-child{
+  text-align:right;
+  font-weight:700;
+}
 
 .total td{
   font-size:14px;
   font-weight:900;
   border-top:2px solid #000;
+  padding-top:3px;
 }
 
-.footer{text-align:center;margin-top:4px;}
+.footer{
+  text-align:center;
+  margin-top:4px;
+  font-size:10px;
+  font-weight:700;
+}
 </style>
 </head>
 
@@ -315,19 +369,34 @@ td:last-child{text-align:right;font-weight:700;}
 
 <div class="receipt">
 
-${s.storeName ? `<div class="store-name">${s.storeName}</div>` : ''}
-${s.address ? `<div class="store-address">${s.address}</div>` : ''}
-${s.gstNumber ? `<div class="store-gst">GST: ${s.gstNumber}</div>` : ''}
+<div class="store-name">
+SREE SAI MEDICAL TECHNOLOGIES
+</div>
 
-<div class="div"></div>
+<div class="store-address">
+No.13, ADHAVA COMPLEX,<br>
+AMMA MANDAPAM ROAD,<br>
+SRIRANGAM, TRICHY - 620 006
+</div>
 
-<div class="meta"><b>${bill.billNumber}</b></div>
-<div class="meta">${dateStr}</div>
-<div class="meta">Payment: ${bill.paymentMode}</div>
+<div class="store-phone">
+Phone : 9940720436
+</div>
 
-<div class="div"></div>
+<div class="store-gst">
+GSTIN : 33ASFPA4973P1ZF
+</div>
+
+<div class="divider"></div>
+
+<div class="meta"><b>Bill No :</b> ${bill.billNumber}</div>
+<div class="meta"><b>Date :</b> ${dateStr}</div>
+<div class="meta"><b>Payment :</b> ${bill.paymentMode}</div>
+
+<div class="divider"></div>
 
 <table>
+
 <thead>
 <tr>
 <th>Item</th>
@@ -337,15 +406,19 @@ ${s.gstNumber ? `<div class="store-gst">GST: ${s.gstNumber}</div>` : ''}
 </tr>
 </thead>
 
-<tbody>${itemRows}</tbody>
+<tbody>
+${itemRows}
+</tbody>
 
 <tfoot>
+
 <tr>
 <td colspan="3">Subtotal</td>
 <td>${fmtN(bill.subtotal)}</td>
 </tr>
 
 ${discountRow}
+
 ${taxRows}
 
 <tr class="total">
@@ -354,10 +427,14 @@ ${taxRows}
 </tr>
 
 ${cashChangeRows || ''}
+
 </tfoot>
+
 </table>
 
-<div class="footer">${s.footerMessage || 'Thank You!'}</div>
+<div class="footer">
+Thank You! Visit Again
+</div>
 
 </div>
 
@@ -1497,13 +1574,13 @@ setTimeout(async () => {
         <div className="flex flex-col flex-1 overflow-hidden bg-slate-50">
           <div className="bg-white border-b border-slate-200 px-5 py-4 flex-shrink-0">
             <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
+              {/* <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
                 <TrendingUp size={16} className="text-indigo-600" />
                 <div>
                   <p className="text-[10px] text-indigo-600 font-medium uppercase tracking-wide">Today's Revenue</p>
                   <p className="text-base font-bold text-indigo-700">{fmt(todayStats.revenue)}</p>
                 </div>
-              </div>
+              </div> */}
               <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
                 <Receipt size={16} className="text-slate-600" />
                 <div>

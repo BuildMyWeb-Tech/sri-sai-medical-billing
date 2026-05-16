@@ -3,6 +3,7 @@
 import Loading from '@/components/Loading';
 import { useAuth } from '@clerk/nextjs';
 import axios from 'axios';
+import Link from 'next/link';
 import {
   IndianRupee,
   ShoppingBasket,
@@ -22,7 +23,7 @@ import {
   Receipt,
   AlertTriangle,
   BarChart2,
-  Zap,
+  Zap,CalendarX 
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -42,6 +43,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
 
 const PIE_COLORS = {
   Delivered: '#22c55e',
@@ -155,34 +157,126 @@ const RevenueTooltip = ({ active, payload, label }) => {
     );
   return null;
 };
+function ExpiryDetailTable() {
+  const { getToken } = useAuth();
+  const [tab, setTab] = useState('expired');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  const tabs = [
+    { key: 'expired', label: '🔴 Expired' },
+    { key: 'critical', label: '🔴 7 Days' },
+    { key: 'soon', label: '🟡 30 Days' },
+    { key: 'none', label: '⚪ No Expiry' },
+  ];
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const token = await getToken();
+        const { data } = await axios.get(`/api/inventory/batches?expiry=${tab}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setRows(data.batches || []);
+      } catch { setRows([]); }
+      finally { setLoading(false); }
+    };
+    load();
+  }, [tab, getToken]);
+
+  return (
+    <div className="mt-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-1 p-4 border-b border-slate-100 overflow-x-auto">
+        {tabs.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${tab === t.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-slate-400 text-sm gap-2">
+          <div className="w-4 h-4 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin" />
+          Loading...
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-10 text-slate-400 text-sm">No items in this category</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-4 py-3 font-medium text-slate-500">Product</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500">Size</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500">Batch</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500">Expiry</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-500">Days Left</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-500">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((b, i) => {
+                const days = b.expiryDate ? Math.ceil((new Date(b.expiryDate) - new Date()) / 86400000) : null;
+                return (
+                  <tr key={b.id} className={`border-b border-slate-50 hover:bg-slate-50/60 ${i % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{b.product?.name}</td>
+                    <td className="px-4 py-2.5">
+                      {b.variant?.size
+                        ? <span className="inline-flex items-center justify-center w-9 h-6 bg-indigo-600 text-white rounded text-xs font-bold">{b.variant.size}</span>
+                        : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{b.batchNumber || '—'}</td>
+                    <td className="px-4 py-2.5 text-xs text-slate-600">
+                      {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {days === null ? <span className="text-slate-400 text-xs">—</span>
+                        : days < 0 ? <span className="text-xs font-bold text-red-800">Expired {Math.abs(days)}d</span>
+                        : days <= 7 ? <span className="text-xs font-bold text-red-600">{days}d</span>
+                        : <span className="text-xs font-semibold text-amber-600">{days}d</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-slate-700">{b.remainingQty}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 export default function Dashboard() {
   const { getToken } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [chartTab, setChartTab] = useState('revenue');
   const [dash, setDash] = useState({
-    totalProducts: 0,
-    totalOrders: 0,
-    totalCategories: 0,
-    totalCustomers: 0,
-    totalEarnings: 0,
-    revenue: 0,
-    pending: 0,
-    processing: 0,
-    shipped: 0,
-    delivered: 0,
-    cancelled: 0,
-    dailyData: [],
-    ratings: [],
-    // ── Feature 10 additions ──────────────────────────────
-    totalBills: 0,
-    totalBillingRevenue: 0,
-    todayBills: 0,
-    todayBillingRevenue: 0,
-    topVariants: [],
-    lowStockVariants: [],
-  });
+  totalProducts: 0,
+  totalOrders: 0,
+  totalCategories: 0,
+  totalCustomers: 0,
+  totalEarnings: 0,
+  revenue: 0,
+  pending: 0,
+  processing: 0,
+  shipped: 0,
+  delivered: 0,
+  cancelled: 0,
+  dailyData: [],
+  ratings: [],
+
+  totalBills: 0,
+  totalBillingRevenue: 0,
+  todayBills: 0,
+  todayBillingRevenue: 0,
+  topVariants: [],
+lowStockVariants: [],
+expiryExpired:  0,
+expiryCritical: 0,
+expirySoon:     0,
+});
 
   const getAuthHeader = async () => {
     const empToken = typeof window !== 'undefined' ? localStorage.getItem('employeeToken') : null;
@@ -191,18 +285,27 @@ export default function Dashboard() {
     return { Authorization: `Bearer ${token}` };
   };
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    try {
-      const headers = await getAuthHeader();
-      const { data } = await axios.get('/api/store/dashboard', { headers });
-      setDash(data.dashboardData);
-    } catch (error) {
-      toast.error(error?.response?.data?.error || error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchDashboardData = async () => {
+  setLoading(true);
+  try {
+    const headers = await getAuthHeader();
+    const { data } = await axios.get('/api/store/dashboard', { headers });
+
+    setDash({
+      ...data.dashboardData,
+
+      // ✅ IMPORTANT: safe fallback
+      expiryExpired: data.dashboardData.expiryExpired || 0,
+      expiryCritical: data.dashboardData.expiryCritical || 0,
+      expirySoon: data.dashboardData.expirySoon || 0,
+    });
+
+  } catch (error) {
+    toast.error(error?.response?.data?.error || error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchDashboardData();
@@ -257,7 +360,10 @@ export default function Dashboard() {
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
           <Receipt size={14} /> Billing
         </h2>
+
+       
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
           <StatCard
             title="Total Bills"
             value={dash.totalBills}
@@ -302,6 +408,61 @@ export default function Dashboard() {
        
         </div>
       </div>
+
+       {/* ── Expiry Alerts ─────────────────────────────────────── */}
+
+
+{(dash.expiryExpired > 0 || dash.expiryCritical > 0 || dash.expirySoon > 0) && (
+  <div>
+    <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+      <AlertTriangle size={14} className="text-amber-500" /> Expiry Alerts
+    </h2>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+ {dash.expiryExpired > 0 && (
+        <Link href="/store/inventory?view=batch&filter=expired"
+          className="flex items-center gap-4 bg-red-900/10 border border-red-300 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-red-200 rounded-xl p-3 flex-shrink-0">
+            <XCircle size={20} className="text-red-800" />
+          </div>
+          <div>
+            <p className="text-xs text-red-700 font-medium uppercase tracking-wide">Expired Stock</p>
+            <p className="text-2xl font-bold text-red-900">{dash.expiryExpired}</p>
+            <p className="text-xs text-red-600 mt-0.5">batches with stock remaining</p>
+          </div>
+        </Link>
+      )}
+      {dash.expiryCritical > 0 && (
+        <Link href="/store/inventory?view=batch&filter=critical"
+          className="flex items-center gap-4 bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-red-100 rounded-xl p-3 flex-shrink-0">
+            <AlertTriangle size={20} className="text-red-600" />
+          </div>
+          <div>
+            <p className="text-xs text-red-600 font-medium uppercase tracking-wide">Critical Expiry</p>
+            <p className="text-2xl font-bold text-red-700">{dash.expiryCritical}</p>
+            <p className="text-xs text-red-500 mt-0.5">expiring within 7 days</p>
+          </div>
+        </Link>
+      )}
+      {dash.expirySoon > 0 && (
+        <Link href="/store/inventory?view=batch&filter=soon"
+          className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-amber-100 rounded-xl p-3 flex-shrink-0">
+            <AlertTriangle size={20} className="text-amber-500" />
+          </div>
+          <div>
+            <p className="text-xs text-amber-600 font-medium uppercase tracking-wide">Expiring Soon</p>
+            <p className="text-2xl font-bold text-amber-700">{dash.expirySoon}</p>
+            <p className="text-xs text-amber-500 mt-0.5">expiring within 30 days</p>
+          </div>
+        </Link>
+      )}
+       </div>
+
+    {/* Detailed expiry table */}
+    <ExpiryDetailTable />
+  </div>
+)}
 
       {/* ── Order Stats ────────────────────────────────────────── */}
       <div>
@@ -488,6 +649,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+     
 
       {/* ── Low Stock Variants (Feature 10) ────────────────────── */}
       {dash.lowStockVariants && dash.lowStockVariants.length > 0 && (

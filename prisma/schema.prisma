@@ -52,6 +52,7 @@ model Product {
   keyFeatures String[] @default([])
   createdBy   String   @default("STORE")
   sku         String?
+  batches  ProductBatch[]
 
   inventory   Inventory[]
   orderItems  OrderItem[]
@@ -78,6 +79,7 @@ model ProductVariant {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  batches  ProductBatch[]
 
   product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   billItems BillItem[]
@@ -259,6 +261,8 @@ model BillItem {
   quantity  Int
   discount  Float    @default(0)
   total     Float
+  batchId  String?
+batch    ProductBatch? @relation(fields: [batchId], references: [id])
 
   bill      Bill            @relation(fields: [billId], references: [id], onDelete: Cascade)
   product   Product         @relation(fields: [productId], references: [id])
@@ -360,4 +364,25 @@ enum PaymentMethod {
 enum SaleSource {
   ORDER
   BILLING
+}
+
+model ProductBatch {
+  id           String   @id @default(cuid())
+  productId    String
+  variantId    String?
+  batchNumber  String?
+  expiryDate     DateTime?
+  quantity     Int
+  remainingQty Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant  ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  billItems BillItem[]
+
+  @@index([productId])
+  @@index([variantId])
+  @@index([expiryDate])
+  @@index([remainingQty])
 }

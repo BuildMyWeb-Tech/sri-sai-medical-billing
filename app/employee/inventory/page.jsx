@@ -14,6 +14,7 @@ import {
   Search,
   ShieldAlert,
 } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 function StockBadge({ quantity, lowStock }) {
   if (quantity === 0)
@@ -46,6 +47,11 @@ export default function EmployeeInventoryPage() {
   const [filter, setFilter] = useState('all');
   const [pageReady, setPageReady] = useState(false);
 
+  const [activeView, setActiveView]     = useState('stock');
+const [batches, setBatches]           = useState([]);
+const [batchLoading, setBatchLoading] = useState(false);
+const [batchSearch, setBatchSearch]   = useState('');
+
   useEffect(() => {
     const empData = localStorage.getItem('empData');
     const empToken = localStorage.getItem('empToken');
@@ -72,6 +78,20 @@ export default function EmployeeInventoryPage() {
       setLoading(false);
     }
   }, [token, allowed]);
+
+  const fetchBatches = useCallback(async (search = batchSearch) => {
+  if (!token || !allowed) return;
+  setBatchLoading(true);
+  try {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    const { data } = await axios.get(`/api/inventory/batches?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setBatches(data.batches || []);
+  } catch { toast.error('Failed to load batches'); }
+  finally { setBatchLoading(false); }
+}, [token, allowed, batchSearch]);
 
   useEffect(() => {
     if (pageReady) fetchInventory();
@@ -103,6 +123,106 @@ export default function EmployeeInventoryPage() {
       </div>
     );
   }
+  function ExpiryBadge({ status }) {
+  const map = {
+  expired:  'bg-red-900/10 text-red-800 border border-red-200',
+  critical: 'bg-red-50 text-red-600 border border-red-200',
+  soon:     'bg-amber-50 text-amber-600 border border-amber-200',
+  ok:       'bg-green-50 text-green-700 border border-green-200',
+  none:     'bg-slate-50 text-slate-500 border border-slate-200',
+};
+  const labels = { expired: '🔴 Expired', critical: '🔴 <7 days', soon: '🟡 <30 days', ok: '🟢 OK', none: '⚪ No Expiry' };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${map[status] || map.ok}`}>
+      {labels[status] || 'OK'}
+    </span>
+  );
+}
+
+function BatchView({ batches, loading, search, setSearch, onSearch }) {
+  return (
+    <div>
+      <div className="flex gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" placeholder="Search by product name or batch number..."
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSearch(search); }}
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300" />
+        </div>
+        <button onClick={() => onSearch(search)}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+          Search
+        </button>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-20 gap-2 text-slate-400">
+            <Loader2 size={20} className="animate-spin" /><span>Loading batches...</span>
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Package size={48} className="mb-3 text-slate-300" />
+            <p className="text-lg font-medium">No batches found</p>
+            <p className="text-sm mt-1">Add stock to see batch entries here</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="text-left px-5 py-4 font-medium text-slate-500">Product</th>
+                  <th className="text-left px-5 py-4 font-medium text-slate-500">Size</th>
+                  <th className="text-left px-5 py-4 font-medium text-slate-500">Batch No</th>
+                 <th className="text-left px-5 py-4 font-medium text-slate-500">Expiry Date</th>
+<th className="text-left px-5 py-4 font-medium text-slate-500">Days Left</th>
+<th className="text-left px-5 py-4 font-medium text-slate-500">Remaining</th>
+<th className="text-left px-5 py-4 font-medium text-slate-500">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map((batch, idx) => (
+                  <tr key={batch.id}
+                    className={`border-b border-slate-50 hover:bg-slate-50/70 transition-colors ${idx === batches.length - 1 ? 'border-b-0' : ''} ${batch.status === 'expired' ? 'bg-red-50/40' : batch.status === 'critical' ? 'bg-red-50/20' : batch.status === 'soon' ? 'bg-amber-50/20' : ''}`}>
+                    <td className="px-5 py-4 font-medium text-slate-800">{batch.product?.name}</td>
+                    <td className="px-5 py-4">
+                      {batch.variant?.size
+                        ? <span className="inline-flex items-center justify-center w-10 h-7 bg-indigo-600 text-white rounded-lg text-xs font-bold">{batch.variant.size}</span>
+                        : <span className="text-slate-400 text-xs">—</span>}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600 font-mono text-xs">{batch.batchNumber || '—'}</td>
+                    <td className="px-5 py-4 text-slate-600 text-xs">
+  {batch.expiryDate
+    ? new Date(batch.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : <span className="text-slate-400">—</span>}
+</td>
+<td className="px-5 py-4">
+  {(() => {
+    if (!batch.expiryDate) return <span className="text-slate-400 text-xs">—</span>;
+    const days = Math.ceil((new Date(batch.expiryDate) - new Date()) / 86400000);
+    if (days < 0) return <span className="text-xs font-semibold text-red-800">Expired {Math.abs(days)}d ago</span>;
+    if (days <= 7)  return <span className="text-xs font-semibold text-red-600">{days}d</span>;
+    if (days <= 15) return <span className="text-xs font-semibold text-orange-600">{days}d</span>;
+    if (days <= 30) return <span className="text-xs font-semibold text-amber-600">{days}d</span>;
+    return <span className="text-xs font-semibold text-green-600">{days}d</span>;
+  })()}
+</td>
+<td className="px-5 py-4">
+  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold text-sm tabular-nums">
+    {batch.remainingQty}
+  </span>
+</td>
+<td className="px-5 py-4"><ExpiryBadge status={batch.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -140,6 +260,22 @@ export default function EmployeeInventoryPage() {
           </div>
         </div>
 
+        {/* Tab switcher */}
+<div className="flex items-center gap-2 mb-4">
+{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: '📦 Batch View' }].map(({ key, label }) => (
+  <button key={key} onClick={() => {
+    setActiveView(key);
+    if (key === 'batch' && batches.length === 0) fetchBatches(); // only fetch if not already loaded
+  }}
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === key ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+      {label}
+    </button>
+  ))}
+</div>
+
+{/* STOCK OVERVIEW — only when activeView is stock */}
+{activeView === 'stock' && (
+  <>
         {/* Filters + Search */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
@@ -236,6 +372,19 @@ export default function EmployeeInventoryPage() {
             </div>
           )}
         </div>
+         </>
+)}
+
+         {/* BATCH VIEW */}
+        {activeView === 'batch' && (
+          <BatchView
+            batches={batches}
+            loading={batchLoading}
+            search={batchSearch}
+            setSearch={setBatchSearch}
+            onSearch={fetchBatches}
+          />
+        )}
 
         {/* Read-only note */}
         <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-700 flex items-center gap-2">

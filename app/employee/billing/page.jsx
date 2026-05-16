@@ -23,7 +23,7 @@ import {
   AlertCircle, CreditCard, Banknote, Smartphone, Maximize,
   Minimize, ShieldAlert, History, TrendingUp, Filter,
   ChevronDown, Eye, AlertTriangle, ScanLine, Settings,
-  Plug, PlugZap, CheckSquare, Square, Layers,
+  Plug, PlugZap, CheckSquare, Square, Layers,Calendar 
 } from 'lucide-react';
 import { calculateTax, formatCurrency, invalidateSettingsCache } from '@/lib/storeSettings';
 import {
@@ -32,6 +32,8 @@ import {
   findVariantByBarcode,
   findVariantByBarcodeSync as findByBarcodeLocal,
 } from '@/lib/pos/productCache';
+import ModalWrapper from '@/components/ui/ModalWrapper';
+import { Loader2 } from 'lucide-react';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
 const LS_PRODUCTS      = 'emp_pos_products_cache';
@@ -396,6 +398,166 @@ window.onload=function(){
   const win = window.open('', '_blank', 'width=380,height=680');
   if (win) { win.document.write(html); win.document.close(); }
 }
+
+function ExpiryBatchModal({ product, variant, onConfirm, onClose, token }) {
+  const [batches, setBatches]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+  // Add token prop usage and accept cacheRef
+// In the component signature, pass cacheRef:
+// ExpiryBatchModal({ product, variant, onConfirm, onClose, token, cacheRef })
+
+const load = async () => {
+  try {
+    // Clean variantId — strip any duplicate suffix
+    const cleanVariantId = String(variant.id).split('_')[0];
+    console.log('[EXPIRY POPUP] Loading batches for variantId:', cleanVariantId, 'product:', product?.name);
+
+    // Always fetch fresh from API — skip stale cache
+    const res = await fetch(
+      `/api/inventory/batches?variantId=${encodeURIComponent(cleanVariantId)}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+    );
+    const data = await res.json();
+    console.log('[EXPIRY POPUP] API returned batches:', data.batches?.length, data.batches);
+
+    // Filter by clean variantId and remainingQty > 0
+    const filtered = (data.batches || []).filter(
+      (b) => String(b.variantId) === cleanVariantId && b.remainingQty > 0
+    );
+    console.log('[EXPIRY POPUP] Filtered batches:', filtered.length, filtered);
+    setBatches(filtered);
+  } catch (err) {
+    console.error('[EXPIRY POPUP] Load error:', err);
+    setBatches([]);
+  }
+  finally { setLoading(false); }
+};
+    load();
+  }, [product, variant, token]);
+
+  const now      = new Date();
+const in7days  = new Date(); in7days.setDate(now.getDate() + 7);
+const in15days = new Date(); in15days.setDate(now.getDate() + 15);
+const in30days = new Date(); in30days.setDate(now.getDate() + 30);
+
+// Color logic helper — Feature 17: 5 levels
+const getBatchColor = (expDate, isSel) => {
+  if (isSel) return {
+    btn: 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200',
+    badge: 'bg-indigo-100 text-indigo-700',
+  };
+  if (!expDate || isNaN(expDate)) return {
+    btn: 'border-slate-200 bg-white hover:border-slate-300',
+    badge: 'bg-slate-100 text-slate-500',   // ← grey not green
+  };
+  if (expDate < now) return {
+    btn: 'border-red-900/30 bg-red-950/10 hover:border-red-900/50',
+    badge: 'bg-red-900/20 text-red-900',
+  };
+  if (expDate <= in7days) return {
+    btn: 'border-red-300 bg-red-50 hover:border-red-500',
+    badge: 'bg-red-100 text-red-700',
+  };
+  if (expDate <= in15days) return {
+    btn: 'border-orange-200 bg-orange-50/60 hover:border-orange-400',
+    badge: 'bg-orange-100 text-orange-700',
+  };
+  if (expDate <= in30days) return {
+    btn: 'border-amber-200 bg-amber-50/60 hover:border-amber-400',
+    badge: 'bg-amber-100 text-amber-700',
+  };
+  return {
+    btn: 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50',
+    badge: 'bg-green-100 text-green-700',
+  };
+};
+
+  return (
+    <ModalWrapper>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+            <Calendar size={20} className="text-orange-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">Select Expiry Batch</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{product?.name} — {variant?.size}</p>
+          </div>
+          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
+            <Loader2 size={16} className="animate-spin" /> Loading batches...
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="text-center py-6 text-slate-400 text-sm">
+            No stock batches found for this variant.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {batches.map((b) => {
+  const expDate  = b.expiryDate ? new Date(b.expiryDate) : null;
+  const isSel    = selected?.id === b.id;
+  const colors   = getBatchColor(expDate, isSel);
+  const isExpired = expDate && expDate < now;
+  const daysLeft  = expDate ? Math.ceil((expDate - now) / 86400000) : null;
+
+const daysLabel = () => {
+  if (!expDate) return '⚪ No expiry date';
+  if (isExpired) return `🔴 Expired ${Math.abs(daysLeft)}d ago`;
+  if (daysLeft <= 7)  return `🔴 ${daysLeft}d left`;
+  if (daysLeft <= 15) return `🟠 ${daysLeft}d left`;
+  if (daysLeft <= 30) return `🟡 ${daysLeft}d left`;
+  return `🟢 ${daysLeft}d left`;
+};
+
+  return (
+    <button key={b.id} onClick={() => setSelected(b)}
+      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all text-left ${colors.btn}`}>
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isSel && <CheckCircle size={13} className="text-indigo-600" />}
+          <span className="font-semibold">
+            {expDate
+              ? `Exp: ${expDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
+              : 'No expiry date'}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colors.badge}`}>
+            {daysLabel()}
+          </span>
+        </div>
+        {b.batchNumber && <p className="text-xs text-slate-400 mt-0.5">Batch: {b.batchNumber}</p>}
+      </div>
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors.badge}`}>
+        {b.remainingQty} left
+      </span>
+    </button>
+  );
+})}
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 text-slate-500 hover:text-slate-700 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 font-medium">
+            Cancel
+          </button>
+          <button onClick={() => selected && onConfirm(selected)} disabled={!selected}
+            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold ${selected ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+            Confirm
+          </button>
+        </div>
+      </div>
+    </ModalWrapper>
+  );
+}
+
 async function printBillAuto(bill, settings, printerName) {
   if (!printerName) { browserPrintFallback(bill, settings); return { method: 'browser', ok: true }; }
   const result = await qzPrintRaw(buildESCPOS(bill, settings), printerName);
@@ -573,6 +735,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
   };
   const isSelected = (variant) => selected.some((v) => v.id === variant.id);
   return (
+    <ModalWrapper>
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
         <div className="flex items-center gap-3 mb-5">
@@ -613,6 +776,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
         </div>
       </div>
     </div>
+    </ModalWrapper>
   );
 }
 
@@ -732,6 +896,8 @@ const [paidAmount, setPaidAmount]             = useState('');
   const [expandedBill, setExpandedBill]       = useState(null);
   const [showFilters, setShowFilters]         = useState(false);
   const [queueBillIds, setQueueBillIds]       = useState(new Set());
+  const [expiryBatchModal, setExpiryBatchModal] = useState(null);
+  const [pendingVariants, setPendingVariants] = useState([]); // queue for multi-size expiry
 
   const syncTimerRef  = useRef(null);
   const historyTimer  = useRef(null);
@@ -817,16 +983,31 @@ useEffect(() => {
         .catch(console.error);
 
       // ✅ Initial product cache load (force fresh)
-      await initProductCache({
+     // ✅ Initialize product cache
+await initProductCache({
         storeId: 'default',
-        token,
-        forceRefresh: true,
-        onRefresh: () => {
-          console.log('🔄 Employee products refreshed');
-        },
-      });
+  token,
+  forceRefresh: true,
+  onRefresh: () => {
+    console.log('🔄 Products refreshed in background');
+  },
+});
 
-      console.log('✅ Employee product cache initialized');
+console.log('✅ Product cache initialized');
+
+// ✅ Preload batch data for fast expiry popup
+fetch('/api/inventory/batches', {
+  headers: token ? { Authorization: `Bearer ${token}` } : {},
+})
+  .then((r) => r.json())
+  .then((d) => {
+    if (d.batches) {
+      // Store in memory — available instantly when popup opens
+      window.__batchCache__ = d.batches;
+      console.log(`✅ ${d.batches.length} batches preloaded`);
+    }
+  })
+  .catch(console.error);
     } catch (err) {
       console.error('Init failed:', err);
     }
@@ -963,11 +1144,24 @@ const handleSearch = useCallback((query) => {
   };
 
   // ── Cart helpers ──────────────────────────────────────────────────────────
-  const buildCartItem = (product, variant) => ({
-    productId: product.id, variantId: variant.id, name: product.name,
-    size: variant.size, price: variant.price, quantity: 1,
-    itemDiscount: 0, total: variant.price, stock: variant.stock,
-  });
+const buildCartItem = (product, variant) => {
+  // Clean variantId — strip any duplicate suffix
+  const cleanVariantId = String(variant.id).split('_')[0];
+  return {
+    productId:   product.id,
+    variantId:   cleanVariantId,
+    name:        product.name,
+    size:        variant.size,
+    price:       variant.price,
+    quantity:    1,
+    itemDiscount: 0,
+    total:       variant.price,
+    stock:       variant.stock,
+    batchId:     variant.batchId     || null,
+    expiryDate:  variant.expiryDate  || null,
+    batchNumber: variant.batchNumber || null,
+  };
+};
 
 const addVariantToCart = useCallback((product, variant) => {
     if (!product || !variant || !variant.id) {
@@ -1012,11 +1206,33 @@ const handleBarcodeScanned = useCallback(async (barcode) => {
   addVariantToCart(found.product, found.variant);
 }, [addVariantToCart, showScanFeedback]);
 
-  const handleProductSelectedFromSearch = (product) => {
-    setSuggestions([]);
-    if (!product.variants || product.variants.length === 0) { showScanFeedback('error', 'No variants found for this product'); return; }
-    setSizePickerModal(product);
-  };
+// Add near top of component, after state declarations:
+const batchCacheRef = useRef({}); // { variantId: batches[] }
+
+// Updated handler:
+const handleProductSelectedFromSearch = (product) => {
+  setSuggestions([]);
+  if (!product?.variants || product.variants.length === 0) {
+    showScanFeedback('error', 'No variants found for this product');
+    return;
+  }
+  // Preload batches for all variants immediately
+  const token = getStoreToken(); // or getEmpToken() in employee file
+  product.variants.forEach((v) => {
+    if (!batchCacheRef.current[v.id]) {
+      fetch(`/api/inventory/batches?search=${encodeURIComponent(product.name)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          const filtered = (d.batches || []).filter((b) => b.variantId === v.id && b.remainingQty > 0);
+          batchCacheRef.current[v.id] = filtered;
+        })
+        .catch(() => {});
+    }
+  });
+  setSizePickerModal(product);
+}; 
 
   const handleDuplicateIncreaseQty = () => {
     if (!duplicateModal) return;
@@ -1052,6 +1268,17 @@ const handleBarcodeScanned = useCallback(async (barcode) => {
 const clearCart = useCallback(() => {
   setCartItems([]); setBillDiscount(0); setNote(''); setPaymentMode('CASH'); setPaidAmount('');
 }, []);
+
+const openNextPending = useCallback((product) => {
+  if (pendingVariants.length > 0) {
+    const [next, ...remaining] = pendingVariants;
+    setPendingVariants(remaining);
+    setExpiryBatchModal({ product, variant: next });
+  } else {
+    setPendingVariants([]);
+    setExpiryBatchModal(null);
+  }
+}, [pendingVariants]);
   // ── Complete bill ─────────────────────────────────────────────────────────
   const completeBill = async () => {
     if (!cartItems.length) return;
@@ -1095,7 +1322,19 @@ changeAmount: changeAmt,
        fetch('/api/inventory/deduct', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  body: JSON.stringify({ billId: billNumber, items: cartItems.map((it) => ({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })) }),
+body: JSON.stringify({
+  billId: billNumber,
+  items: cartItems.map((it) => {
+    const cleanVariantId = String(it.variantId).split('_')[0];
+    console.log('[DEDUCT PAYLOAD] variantId:', cleanVariantId, 'batchId:', it.batchId, 'qty:', it.quantity);
+    return {
+      productId: it.productId,
+      variantId: cleanVariantId,
+      quantity:  it.quantity,
+      batchId:   it.batchId || null,
+    };
+  }),
+}),
 })
 .then((r) => r.json())
 .then((data) => {
@@ -1211,10 +1450,10 @@ setTimeout(async () => {
             <button onClick={() => setActiveTab('billing')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === 'billing' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <ShoppingCart size={12} /> New Bill
             </button>
-            <button onClick={() => setActiveTab('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            {/* <button onClick={() => setActiveTab('history')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <History size={12} /> History
-            {/*  {localBills.length > 0 && <span className="bg-blue-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>}  */}
-            </button>
+             {localBills.length > 0 && <span className="bg-blue-400 text-white text-[9px] px-1.5 rounded-full ml-0.5">{localBills.length}</span>} 
+            </button> */}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1248,11 +1487,11 @@ setTimeout(async () => {
                   <span className={`text-xs font-medium px-3 py-1 rounded-full ${lastScanFeedback.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{lastScanFeedback.message}</span>
                 )}
                 {/* <div className="text-[10px] text-slate-400">{localProducts.length} products cached</div> */}
-              </div>
+      w        </div>
               <CombinedInput
                 onScan={handleBarcodeScanned} onSearch={handleSearch}
-                disabled={!!duplicateModal || !!sizePickerModal || !!showPrintSettings || activeTab !== 'billing'}
-                searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
+disabled={!!duplicateModal || !!sizePickerModal || !!expiryBatchModal || pendingVariants.length > 0 || !!showPrintSettings || activeTab !== 'billing'}
+searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
                 searchLoading={false}
               />
             </div>
@@ -1636,11 +1875,49 @@ setTimeout(async () => {
       )}
 
       {/* ── SIZE PICKER MODAL ──────────────────────────────────── */}
-      {sizePickerModal && (
-        <SizePickerModal product={sizePickerModal}
-          onConfirm={(product, variants) => { setSizePickerModal(null); variants.forEach((variant) => addVariantToCart(product, variant)); }}
-          onClose={() => setSizePickerModal(null)} />
-      )}
+     {sizePickerModal && (
+  <SizePickerModal
+    product={sizePickerModal}
+   onConfirm={(product, variants) => {
+  if (!Array.isArray(variants) || variants.length === 0) return;
+  setSizePickerModal(null);
+  // Always open expiry popup one by one — never skip for any qty of sizes
+  // Store pending variants queue, open first one immediately
+  setPendingVariants(variants.slice(1)); // store remaining
+  setExpiryBatchModal({ product, variant: variants[0] }); // open first
+}}
+    onClose={() => setSizePickerModal(null)}
+  />
+)}
+
+{expiryBatchModal && (
+  <ExpiryBatchModal
+    product={expiryBatchModal.product}
+    variant={expiryBatchModal.variant}
+    token={getEmpToken()}
+      cacheRef={batchCacheRef}
+
+   onConfirm={(batch) => {
+  const enrichedVariant = {
+    ...expiryBatchModal.variant,
+    batchId:     batch.id,
+    batchNumber: batch.batchNumber || null,
+    expiryDate:  batch.expiryDate  || null,
+  };
+  addVariantToCart(expiryBatchModal.product, enrichedVariant);
+  openNextPending(expiryBatchModal.product);
+}}
+onClose={() => {
+  // User cancelled this size — skip it but continue remaining
+  openNextPending(expiryBatchModal.product);
+}}
+    // onClose={() => {
+    //   setPendingVariants([]);
+    //   setExpiryBatchModal(null);
+    // }}
+  />
+)}
+
 
       {/* ── PRINT SETTINGS MODAL ─────────────────────────────── */}
       {showPrintSettings && (

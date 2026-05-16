@@ -277,11 +277,11 @@ export default function AdminAddProductPage() {
         setActiveLabel(v.label);
         return false;
       }
-      if (v.stock === '' || v.stock === undefined || Number(v.stock) < 0) {
-        toast.error(`Please enter stock for variant "${v.label}"`);
-        setActiveLabel(v.label);
-        return false;
-      }
+      // if (v.stock === '' || v.stock === undefined || Number(v.stock) < 0) {
+      //   toast.error(`Please enter stock for variant "${v.label}"`);
+      //   setActiveLabel(v.label);
+      //   return false;
+      // }
     }
     return true;
   };

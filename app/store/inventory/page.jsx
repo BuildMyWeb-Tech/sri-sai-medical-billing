@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react';
+import Link from 'next/link';
+import { Calendar, Plus } from 'lucide-react';
 
 // ── Status badge ──────────────────────────────────────────────────
 function StockBadge({ quantity, lowStock }) {
@@ -122,6 +124,125 @@ function SummaryCards({ inventory }) {
   );
 }
 
+function ExpiryBadge({ status }) {
+ const map = {
+  expired:  'bg-red-900/10 text-red-800 border border-red-200',
+  critical: 'bg-red-50 text-red-600 border border-red-200',
+  soon:     'bg-amber-50 text-amber-600 border border-amber-200',
+  ok:       'bg-green-50 text-green-700 border border-green-200',
+  none:     'bg-slate-50 text-slate-500 border border-slate-200',
+};
+  const labels = { expired: '🔴 Expired', critical: '🔴 <7 days', soon: '🟡 <30 days', ok: '🟢 OK', none: '⚪ No Expiry' };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${map[status] || map.ok}`}>
+      {labels[status] || 'OK'}
+    </span>
+  );
+}
+
+function BatchView({ batches, loading, search, setSearch, onSearch, onEdit, onDelete }) {
+    return (
+    <div>
+      <div className="flex gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" placeholder="Search by product name or batch number..."
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSearch(search); }}
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300" />
+        </div>
+        <button onClick={() => onSearch(search)}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+          Search
+        </button>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-20 gap-2 text-slate-400">
+            <Loader2 size={20} className="animate-spin" /><span>Loading batches...</span>
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Package size={48} className="mb-3 text-slate-300" />
+            <p className="text-lg font-medium">No batches found</p>
+            <p className="text-sm mt-1">Add stock to see batch entries here</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="text-left px-4 py-3 font-medium text-slate-500 w-[25%]">Product</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[4%]">Size</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[10%]">Batch No</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[13%]">Expiry</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[10%]">Days</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[3%]">Qty</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[19%]">Status</th>
+<th className="text-left px-3 py-3 font-medium text-slate-500 w-[14%]">Action</th>
+
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map((batch, idx) => (
+                  <tr key={batch.id}
+                    className={`border-b border-slate-50 hover:bg-slate-50/70 transition-colors ${idx === batches.length - 1 ? 'border-b-0' : ''} ${batch.status === 'expired' ? 'bg-red-50/40' : batch.status === 'critical' ? 'bg-red-50/20' : batch.status === 'soon' ? 'bg-amber-50/20' : ''}`}>
+                    <td className="px-5 py-4 font-medium text-slate-800">{batch.product?.name}</td>
+                    <td className="px-5 py-4">
+                      {batch.variant?.size
+                        ? <span className="inline-flex items-center justify-center w-10 h-7 bg-indigo-600 text-white rounded-lg text-xs font-bold">{batch.variant.size}</span>
+                        : <span className="text-slate-400 text-xs">—</span>}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600 font-mono text-xs">{batch.batchNumber || '—'}</td>
+                 <td className="px-5 py-4 text-slate-600 text-xs">
+  {batch.expiryDate
+    ? new Date(batch.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : <span className="text-slate-400">—</span>}
+</td>
+<td className="px-5 py-4">
+  {(() => {
+    if (!batch.expiryDate) return <span className="text-slate-400 text-xs">—</span>;
+    const days = Math.ceil((new Date(batch.expiryDate) - new Date()) / 86400000);
+    if (days < 0) return <span className="text-xs font-semibold text-red-800">Expired {Math.abs(days)}d ago</span>;
+    if (days <= 7)  return <span className="text-xs font-semibold text-red-600">{days}d</span>;
+    if (days <= 15) return <span className="text-xs font-semibold text-orange-600">{days}d</span>;
+    if (days <= 30) return <span className="text-xs font-semibold text-amber-600">{days}d</span>;
+    return <span className="text-xs font-semibold text-green-600">{days}d</span>;
+  })()}
+</td>
+<td className="px-5 py-4">
+  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold text-sm tabular-nums">
+    {batch.remainingQty}
+  </span>
+</td>
+<td className="px-5 py-4"><ExpiryBadge status={batch.status} /></td>
+<td className="px-5 py-4">
+  {batch.remainingQty === batch.quantity ? (
+    <div className="flex items-center gap-2">
+      <button onClick={() => onEdit(batch)}
+        className="text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors">
+        Edit
+      </button>
+      <button onClick={async () => { onDelete(batch.id); }}
+        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors">
+        Delete
+      </button>
+    </div>
+  ) : (
+    <span className="text-xs text-slate-300 italic">Partially sold</span>
+  )}
+</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Skeleton for summary cards ────────────────────────────────────
 function SummaryCardsSkeleton() {
   return (
@@ -136,12 +257,102 @@ function SummaryCardsSkeleton() {
   );
 }
 
+function EditBatchModal({ batch, onSave, onClose, getToken }) {
+  const [form, setForm] = useState({
+    expiryDate: batch.expiryDate ? new Date(batch.expiryDate).toISOString().split('T')[0] : '',
+    quantity: String(batch.quantity),
+    batchNumber: batch.batchNumber || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = await getToken();
+      await axios.patch(`/api/inventory/batch/${batch.id}`, {
+        expiryDate:  form.expiryDate || null,
+        quantity:    Number(form.quantity),
+        batchNumber: form.batchNumber || null,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success('Batch updated');
+      onSave();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Update failed');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+        <h3 className="font-bold text-slate-800 text-lg">Edit Batch</h3>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Batch Number</label>
+          <input type="text" value={form.batchNumber}
+            onChange={(e) => setForm(p => ({ ...p, batchNumber: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Quantity</label>
+          <input type="number" min="1" value={form.quantity}
+            onChange={(e) => setForm(p => ({ ...p, quantity: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Expiry Date <span className="text-slate-400">(optional)</span></label>
+          <input type="date" value={form.expiryDate}
+            onChange={(e) => setForm(p => ({ ...p, expiryDate: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-500 hover:bg-slate-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────
 export default function StoreInventoryPage() {
   const { getToken } = useAuth();
   const [inventory, setInventory] = useState([]);
   const [search, setSearch]       = useState('');
   const [filter, setFilter]       = useState('all');
+  const [activeView, setActiveView] = useState('stock');   // 'stock' | 'batch'
+
+const [batchSearch, setBatchSearch] = useState('');
+const [editingBatch, setEditingBatch] = useState(null);
+
+const batchFetcher = useCallback(async (url) => {
+  const token = await getToken();
+
+  const { data } = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.batches || [];
+}, [getToken]);
+
+const batchSWRKey =
+  activeView === 'batch'
+    ? `/api/inventory/batches${
+        batchSearch ? `?search=${batchSearch}` : ''
+      }`
+    : null;
+
+const {
+  data: batches = [],
+  isLoading: batchLoading,
+  mutate: mutateBatches,
+} = useSWR(batchSWRKey, batchFetcher, {
+  revalidateOnFocus: false,
+  dedupingInterval: 10000,
+});
 
   const fetcher = useCallback(async () => {
     const token = await getToken();
@@ -162,6 +373,25 @@ export default function StoreInventoryPage() {
   }, [data]);
 
   const fetchInventory = useCallback(() => { mutate(); }, [mutate]);
+
+// Refresh both views together
+const refreshAll = useCallback(() => {
+  mutate();         // inventory overview
+  mutateBatches();  // batch cache refresh
+}, [mutate, mutateBatches]);
+
+// Auto refresh inventory when batch view active
+// Auto refresh inventory + batches every 30 sec
+useEffect(() => {
+  if (activeView !== 'batch') return;
+
+  const interval = setInterval(() => {
+    mutate();
+    mutateBatches();
+  }, 30000);
+
+  return () => clearInterval(interval);
+}, [activeView, mutate, mutateBatches]);
 
   const handleUpdated = useCallback(
     (productId, newLowStock) => {
@@ -187,24 +417,46 @@ export default function StoreInventoryPage() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
-              <Package size={22} className="text-indigo-600" />
-              Inventory
-            </h1>
-            <p className="text-slate-500 mt-1 text-sm">Manage stock levels for your products</p>
-          </div>
-          <button
-            onClick={fetchInventory}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-white transition-colors"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
-        </div>
+  <div>
+    <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
+      <Package size={22} className="text-indigo-600" />
+      Inventory
+    </h1>
+    <p className="text-slate-500 mt-1 text-sm">Manage stock levels for your products</p>
+  </div>
+  <div className="flex items-center gap-2">
+    <Link
+      href="/store/inventory/add-stock"
+      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors"
+    >
+      <Plus size={14} /> Add Stock
+    </Link>
+    <button
+      onClick={fetchInventory}
+      className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-white transition-colors"
+    >
+      <RefreshCw size={14} /> Refresh
+    </button>
+  </div>
+</div>
 
         {/* Summary Cards — skeleton while loading, real data after */}
         {isLoading ? <SummaryCardsSkeleton /> : <SummaryCards inventory={inventory} />}
 
+        {/* Tab switcher */}
+<div className="flex items-center gap-2 mb-4">
+{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: '📦 Batch View' }].map(({ key, label }) => (
+ <button
+  key={key}
+  onClick={() => setActiveView(key)}
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === key ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+      {label}
+    </button>
+  ))}
+</div>
+{/* STOCK OVERVIEW — only when activeView is stock */}
+{activeView === 'stock' && (
+  <>
         {/* Filters + Search */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
@@ -248,7 +500,8 @@ export default function StoreInventoryPage() {
                     <th className="text-left px-5 py-4 font-medium text-slate-500">Stock Qty</th>
                     <th className="text-left px-5 py-4 font-medium text-slate-500 hidden sm:table-cell">Low Threshold</th>
                     <th className="text-left px-5 py-4 font-medium text-slate-500">Status</th>
-                    <th className="text-left px-5 py-4 font-medium text-slate-500 hidden md:table-cell">Last Updated</th>
+<th className="text-left px-5 py-4 font-medium text-slate-500">Action</th>
+                    {/* <th className="text-left px-5 py-4 font-medium text-slate-500 hidden md:table-cell">Last Updated</th> */}
                   </tr>
                 </thead>
                 <tbody>
@@ -271,9 +524,9 @@ export default function StoreInventoryPage() {
                       <td className="px-5 py-4">
                         <StockBadge quantity={inv.quantity} lowStock={inv.lowStock} />
                       </td>
-                      <td className="px-5 py-4 hidden md:table-cell text-slate-400 text-xs">
+                      {/* <td className="px-5 py-4 hidden md:table-cell text-slate-400 text-xs">
                         {new Date(inv.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
@@ -281,6 +534,41 @@ export default function StoreInventoryPage() {
             </div>
           )}
         </div>
+         </>
+)}
+
+       {activeView === 'batch' && (
+<BatchView
+  batches={batches}
+  loading={batchLoading}
+  search={batchSearch}
+  setSearch={setBatchSearch}
+  onSearch={() => mutateBatches()}
+    onEdit={(batch) => setEditingBatch(batch)}
+    onDelete={async (batchId) => {
+      if (!confirm('Delete this batch? This cannot be undone.')) return;
+      try {
+        const token = await getToken();
+        await axios.delete(`/api/inventory/batch/${batchId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+       toast.success('Batch deleted');
+       refreshAll();
+      } catch (err) {
+        toast.error(err?.response?.data?.error || 'Delete failed');
+      }
+    }}
+  />
+)}
+        {editingBatch && (
+  <EditBatchModal
+    batch={editingBatch}
+    getToken={getToken}
+onSave={() => { setEditingBatch(null); refreshAll(); }}
+    onClose={() => setEditingBatch(null)}
+  />
+)}
+
       </div>
     </div>
   );

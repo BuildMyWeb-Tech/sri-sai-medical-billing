@@ -7,25 +7,65 @@ import { verifyEmployeeToken } from '@/middlewares/authEmployee';
 import { NextResponse } from 'next/server';
 
 // ─────────────────────────────────────────────
-// Resolve storeId (STORE + EMPLOYEE)
+// Resolve Store Context
 // ─────────────────────────────────────────────
 async function resolveStoreId(request) {
   try {
-    const emp = verifyEmployeeToken(request);
-    if (emp?.storeId) {
-      return { storeId: emp.storeId, role: 'EMPLOYEE' };
-    }
-  } catch (_) {}
+    const authHeader =
+      request.headers.get('authorization') || '';
 
-  try {
+    // Employee token auth
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        const emp = verifyEmployeeToken(request);
+
+        if (emp?.storeId) {
+          return {
+            storeId: emp.storeId,
+            role: 'EMPLOYEE',
+            employeeId: emp.id,
+          };
+        }
+      } catch (err) {
+        console.error(
+          'verifyEmployeeToken error:',
+          err?.message
+        );
+      }
+    }
+
+    // Clerk store owner auth
     const { userId } = getAuth(request);
+
     if (userId) {
       const storeId = await authSeller(userId);
-      if (storeId) return { storeId, role: 'STORE' };
-    }
-  } catch (_) {}
 
-  return { storeId: null, role: null };
+      if (storeId) {
+        return {
+          storeId,
+          role: 'STORE',
+          employeeId: null,
+        };
+      }
+    }
+
+    return {
+      storeId: null,
+      role: null,
+      employeeId: null,
+    };
+  } catch (error) {
+    console.error(
+      'resolveStoreId error:',
+      error
+    );
+
+    return {
+      storeId: null,
+      role: null,
+      employeeId: null,
+    };
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -33,117 +73,193 @@ async function resolveStoreId(request) {
 // ─────────────────────────────────────────────
 export async function GET(request) {
   try {
-    const { storeId, role } = await resolveStoreId(request);
+    const { storeId, role } =
+      await resolveStoreId(request);
 
     if (!storeId) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+      return NextResponse.json(
+        {
+          error: 'Unauthorized',
+        },
+        {
+          status: 401,
+        }
+      );
     }
 
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search')?.trim() || '';
-    const limit = Math.min(500, parseInt(searchParams.get('limit') || '200'));
+    const { searchParams } =
+      new URL(request.url);
 
-    // ⚡ STEP 1: FAST BARCODE MATCH (FOR SCANNER)
-    if (search) {
-      const exactVariant = await prisma.productVariant.findFirst({
-        where: {
-          barcode: search,
-          product: {
-            storeId,
-          },
-        },
-        include: {
-          product: true,
-        },
-      });
+    const rawSearch =
+      searchParams.get('search') || '';
 
-      if (exactVariant) {
-  // Fetch ALL variants of this product so cache is fully populated
-  const allVariants = await prisma.productVariant.findMany({
-    where: { productId: exactVariant.productId },
-    select: {
-      id: true,
-      size: true,
-      price: true,
-      stock: true,
-      barcode: true,
-      productId: true,
-    },
-    orderBy: { size: 'asc' },
-  });
+    const search = rawSearch.trim();
 
-  return NextResponse.json({
-    role,
-    products: [
-      {
-        id: exactVariant.product.id,
-        name: exactVariant.product.name,
-        sku: exactVariant.product.sku,
-        variants: allVariants,
-      },
-    ],
-    type: 'BARCODE_MATCH',
-  });
-}
-    }
+    const limit = Math.min(
+      500,
+      Math.max(
+        1,
+        parseInt(
+          searchParams.get('limit') || '200',
+          10
+        )
+      )
+    );
 
-    // ⚡ STEP 2: NORMAL SEARCH (NAME / SKU / BARCODE PARTIAL)
-    let where = { storeId };
+    // ─────────────────────────────────────────
+    // WHERE CLAUSE
+    // ─────────────────────────────────────────
+    const where = {
+      storeId,
+      isDeleted: false,
 
-    if (search) {
-      where = {
-        storeId,
+      ...(search && {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { sku: { contains: search, mode: 'insensitive' } },
+          {
+            name: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+
+          {
+            sku: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+
           {
             variants: {
               some: {
-                barcode: { contains: search },
+                barcode: {
+                  contains: search,
+                },
               },
             },
           },
         ],
-      };
+      }),
+    };
+
+    // ─────────────────────────────────────────
+    // FETCH PRODUCTS
+    // ─────────────────────────────────────────
+    const products =
+      await prisma.product.findMany({
+        where,
+
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          mrp: true,
+          quantity: true,
+          inStock: true,
+          images: true,
+          createdAt: true,
+
+          variants: {
+            select: {
+              id: true,
+              size: true,
+              price: true,
+              stock: true,
+              barcode: true,
+
+              // ✅ LIVE BATCHES
+              batches: {
+                where: {
+                  remainingQty: {
+                    gt: 0,
+                  },
+                },
+
+                select: {
+                  id: true,
+
+                  // ✅ FIXED FIELD NAME
+                  batchNumber: true,
+
+                  expiryDate: true,
+                  quantity: true,
+                  remainingQty: true,
+
+                  createdAt: true,
+                  updatedAt: true,
+                },
+
+                orderBy: [
+                  {
+                    expiryDate: 'asc',
+                  },
+                  {
+                    createdAt: 'asc',
+                  },
+                ],
+              },
+            },
+
+            orderBy: {
+              size: 'asc',
+            },
+          },
+        },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
+
+        take: limit,
+      });
+
+    // ─────────────────────────────────────────
+    // BARCODE DIRECT MATCH
+    // ─────────────────────────────────────────
+    if (search) {
+      const exactBarcodeProducts =
+        products.filter((product) =>
+          product.variants?.some(
+            (variant) =>
+              String(
+                variant.barcode || ''
+              ).trim() === search
+          )
+        );
+
+      if (exactBarcodeProducts.length > 0) {
+        return NextResponse.json({
+          type: 'BARCODE_MATCH',
+          role,
+          products: exactBarcodeProducts,
+        });
+      }
     }
 
-    // ⚡ STEP 3: FETCH PRODUCTS
-    const products = await prisma.product.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        variants: {
-          select: {
-            id: true,
-            size: true,
-            price: true,
-            stock: true,
-            barcode: true,
-            productId: true,
-          },
-          orderBy: { size: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
-
-    // ⚡ STEP 4: REMOVE EMPTY VARIANT PRODUCTS (IMPORTANT)
-    const filteredProducts = products.filter(p => p.variants.length > 0);
-
+    // ─────────────────────────────────────────
+    // SUCCESS RESPONSE
+    // ─────────────────────────────────────────
     return NextResponse.json({
+      type: 'PRODUCT_LIST',
       role,
-      products: filteredProducts,
-      type: 'SEARCH_RESULT',
+      count: products.length,
+      products,
     });
-
   } catch (error) {
-    console.error('❌ products-for-billing error:', error);
+    console.error(
+      'GET /api/store/products-for-billing error:',
+      error
+    );
+
     return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
+      {
+        error:
+          error?.message ||
+          'Failed to fetch products',
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

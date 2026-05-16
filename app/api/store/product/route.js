@@ -108,95 +108,171 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const { storeId } = await resolveStore(request);
-    if (!storeId) return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
+
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'Not authorized' },
+        { status: 401 }
+      );
+    }
 
     const formData = await request.formData();
 
     const name        = formData.get('name')?.trim();
     const description = formData.get('description')?.trim() || '';
-    const mrp         = formData.get('mrp') ? Number(formData.get('mrp')) : 0;
+    const mrp         = Number(formData.get('mrp') || 0);
 
     const categoryRaw    = formData.get('category');
     const keyFeaturesRaw = formData.get('keyFeatures');
     const variantsRaw    = formData.get('variants');
-    const images         = formData.getAll('images').filter((f) => f && f.size > 0);
+
+    const images = formData
+      .getAll('images')
+      .filter((f) => f && f.size > 0);
 
     let category = [];
-    try { const p = JSON.parse(categoryRaw); if (Array.isArray(p)) category = p; } catch {}
-
     let keyFeatures = [];
+    let variants = [];
+
     try {
-      const p = JSON.parse(keyFeaturesRaw);
-      if (Array.isArray(p)) keyFeatures = p.filter((f) => typeof f === 'string' && f.trim());
+      const parsed = JSON.parse(categoryRaw);
+      if (Array.isArray(parsed)) category = parsed;
     } catch {}
 
-    let variants = [];
-    try { const p = JSON.parse(variantsRaw); if (Array.isArray(p)) variants = p; } catch {}
+    try {
+      const parsed = JSON.parse(keyFeaturesRaw);
+      if (Array.isArray(parsed)) {
+        keyFeatures = parsed.filter(
+          (f) => typeof f === 'string' && f.trim()
+        );
+      }
+    } catch {}
 
-    const missing = validateProductFields({ name, variants });
+    try {
+      const parsed = JSON.parse(variantsRaw);
+      if (Array.isArray(parsed)) variants = parsed;
+    } catch {}
+
+    const missing = validateProductFields({
+      name,
+      variants,
+    });
+
     if (missing.length > 0) {
-      return NextResponse.json({ error: `Missing: ${missing.join(', ')}` }, { status: 400 });
+      return NextResponse.json(
+        { error: `Missing: ${missing.join(', ')}` },
+        { status: 400 }
+      );
     }
 
+    // Upload images BEFORE DB queries
     let imagesUrl = [];
+
     if (images.length > 0) {
       imagesUrl = await Promise.all(
         images.map(async (image) => {
-          const buffer   = Buffer.from(await image.arrayBuffer());
-          const response = await imagekit.upload({ file: buffer, fileName: image.name, folder: 'products' });
+          const buffer = Buffer.from(
+            await image.arrayBuffer()
+          );
+
+          const response = await imagekit.upload({
+            file: buffer,
+            fileName: image.name,
+            folder: 'products',
+          });
+
           return imagekit.url({
             path: response.filePath,
-            transformation: [{ quality: 'auto' }, { format: 'webp' }, { width: '1024' }],
+            transformation: [
+              { quality: 'auto' },
+              { format: 'webp' },
+              { width: '1024' },
+            ],
           });
         })
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const totalQty = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    // Calculate stock
+    const totalQty = variants.reduce(
+      (sum, v) => sum + (Number(v.stock) || 0),
+      0
+    );
 
-      const product = await tx.product.create({
-        data: {
-          name, description, mrp,
-          quantity: totalQty,
-          category, keyFeatures,
-          images: imagesUrl,
-          inStock:   totalQty > 0,
-          isDeleted: false,
-          storeId,
-          createdBy: 'STORE',
-        },
-      });
-
-      await tx.productVariant.createMany({
-        data: variants.map((v) => ({
-          productId: product.id,
-          size:      v.size,
-          barcode:   v.barcode,
-          price:     Number(v.price),
-          stock:     Number(v.stock) || 0,
-        })),
-      });
-
-      await tx.inventory.upsert({
-        where:  { productId_storeId: { productId: product.id, storeId } },
-        update: { quantity: totalQty },
-        create: { productId: product.id, storeId, quantity: totalQty, lowStock: 10 },
-      });
-
-      return product;
+    // STEP 1 — Create Product
+    const product = await prisma.product.create({
+      data: {
+        name,
+        description,
+        mrp,
+        quantity: totalQty,
+        category,
+        keyFeatures,
+        images: imagesUrl,
+        inStock: totalQty > 0,
+        isDeleted: false,
+        storeId,
+        createdBy: 'STORE',
+      },
     });
 
-    return NextResponse.json({ message: 'Product created successfully', product: result });
+    // STEP 2 — Create Variants
+    if (variants.length > 0) {
+      await prisma.productVariant.createMany({
+        data: variants.map((v) => ({
+          productId: product.id,
+          size: v.size,
+          barcode: v.barcode,
+          price: Number(v.price),
+          stock: Number(v.stock) || 0,
+        })),
+      });
+    }
+
+    // STEP 3 — Create Inventory
+    await prisma.inventory.upsert({
+      where: {
+        productId_storeId: {
+          productId: product.id,
+          storeId,
+        },
+      },
+      update: {
+        quantity: totalQty,
+      },
+      create: {
+        productId: product.id,
+        storeId,
+        quantity: totalQty,
+        lowStock: 10,
+      },
+    });
+
+    return NextResponse.json({
+      message: 'Product created successfully',
+      product,
+    });
+
   } catch (error) {
     console.error('POST /api/store/product error:', error);
-    if (error.code === 'P2002' && error.meta?.target?.includes('barcode')) {
+
+    if (
+      error.code === 'P2002' &&
+      error.meta?.target?.includes('barcode')
+    ) {
       return NextResponse.json(
-        { error: 'One or more barcodes are already in use. Each barcode must be unique.' },
+        {
+          error:
+            'One or more barcodes are already in use.',
+        },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }
 

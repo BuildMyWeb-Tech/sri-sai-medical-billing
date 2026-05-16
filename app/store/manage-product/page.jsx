@@ -89,18 +89,18 @@ function VariantStockEdit({ variant, lowStockThreshold, onSave }) {
   if (editing) {
     return (
       <div className="flex items-center gap-1">
-        <input
+        {/* <input
           type="number" min="0" autoFocus value={val}
           onChange={(e) => setVal(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
           className="w-14 px-2 py-1 text-xs border border-indigo-400 rounded-md outline-none ring-2 ring-indigo-100 bg-white"
-        />
-        <button onClick={save} disabled={saving} className="p-1 text-green-600 hover:bg-green-50 rounded">
+        /> */}
+        {/* <button onClick={save} disabled={saving} className="p-1 text-green-600 hover:bg-green-50 rounded">
           {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-        </button>
-        <button onClick={() => { setVal(variant.stock); setEditing(false); }} className="p-1 text-red-400 hover:bg-red-50 rounded">
+        </button> */}
+        {/* <button onClick={() => { setVal(variant.stock); setEditing(false); }} className="p-1 text-red-400 hover:bg-red-50 rounded">
           <X size={11} />
-        </button>
+        </button> */}
       </div>
     );
   }
@@ -108,8 +108,7 @@ function VariantStockEdit({ variant, lowStockThreshold, onSave }) {
   return (
     <div className="flex items-center gap-1">
       <button
-        onClick={() => setEditing(true)}
-        className={`text-xs font-semibold hover:underline transition-colors ${isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-700'}`}
+        className={`text-xs font-semibold transition-colors ${isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-700'}`}
       >
         {val}
       </button>

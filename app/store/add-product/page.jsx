@@ -22,7 +22,6 @@ import {
   Trash2,
   Layers,
   Barcode,
-  Hash,
   ChevronDown,
   ChevronUp,
   AlertCircle,
@@ -30,7 +29,7 @@ import {
 
 const GLOBAL_SIZES = ['S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
-const emptyVariant = (label) => ({ label, barcode: '', price: '', stock: '' });
+const emptyVariant = (label) => ({ label, barcode: '', price: '' });
 
 // ── Add Variant Modal ─────────────────────────────────────────────
 function AddVariantModal({ existingLabels, globalSizes = [], onAdd, onClose }) {
@@ -115,7 +114,7 @@ function AddVariantModal({ existingLabels, globalSizes = [], onAdd, onClose }) {
 // ── Variant detail fields ─────────────────────────────────────────
 function VariantFields({ variant, onChange }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 p-3 bg-indigo-50/40 border border-indigo-100 rounded-xl">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 p-3 bg-indigo-50/40 border border-indigo-100 rounded-xl">
       <div className="flex flex-col gap-1">
         <label className="text-xs font-semibold text-slate-500 uppercase">Barcode</label>
         <div className="relative">
@@ -135,17 +134,6 @@ function VariantFields({ variant, onChange }) {
             type="number" placeholder="0.00" min="0" value={variant.price}
             onChange={(e) => onChange('price', e.target.value)}
             className="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 bg-white placeholder:text-slate-300"
-          />
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-semibold text-slate-500 uppercase">Stock</label>
-        <div className="relative">
-          <Hash size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="number" placeholder="0" min="0" value={variant.stock}
-            onChange={(e) => onChange('stock', e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 bg-white placeholder:text-slate-300"
           />
         </div>
       </div>
@@ -357,11 +345,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
         setActiveLabel(v.label);
         return false;
       }
-      if (v.stock === '' || v.stock === undefined || Number(v.stock) < 0) {
-        toast.error(`Please enter stock for variant "${v.label}"`);
-        setActiveLabel(v.label);
-        return false;
-      }
+     
     }
     return true;
   };
@@ -384,13 +368,13 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
     if (!validateVariants()) return;
 
     const cleanedFeatures  = keyFeatures.filter((f) => f.trim());
-    const variantPayload   = variantList.map((v) => ({
-      ...(v.id ? { id: v.id } : {}),
-      size:    v.label,
-      barcode: v.barcode,
-      price:   Number(v.price),
-      stock:   Number(v.stock),
-    }));
+   const variantPayload = variantList.map((v) => ({
+  ...(v.id ? { id: v.id } : {}),
+  size:    v.label,
+  barcode: v.barcode,
+  price:   Number(v.price),
+  stock:   0,  // stock managed via Add Stock page, not here
+}));
 
     try {
       setLoading(true);
@@ -619,7 +603,7 @@ const [storeGlobalSizes, setStoreGlobalSizes] = useState([]);
                 <div className="flex flex-wrap gap-2">
                   {variantList.map((v) => {
                     const isActive = activeLabel === v.label;
-                    const filled   = v.barcode && v.price && v.stock !== '';
+                    const filled = v.barcode && v.price;
                     return (
                       <div key={v.label} className="relative group">
                         <button type="button" onClick={() => setActiveLabel(isActive ? null : v.label)}

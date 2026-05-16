@@ -1,6 +1,8 @@
+C:\Users\ajaik\Desktop\sri-sai-medical-billing>node show-structure.js
 📄 .env
 📄 .env.example
 📄 .gitignore
+📁 .idea
 📁 app
    📁 (public)
       📁 about
@@ -94,6 +96,12 @@
       📁 inngest
          📄 route.js
       📁 inventory
+         📁 batch
+            📄 route.js
+            📁 [id]
+               📄 route.js
+         📁 batches
+            📄 route.js
          📁 deduct
             📄 route.js
          📄 route.js
@@ -146,7 +154,11 @@
                📄 route.js
          📁 products-for-billing
             📄 route.js
+         📁 products-light
+            📄 route.js
          📁 settings
+            📄 route.js
+         📁 sizes
             📄 route.js
          📁 stock-toggle
             📄 route.js
@@ -189,6 +201,8 @@
       📁 employees
          📄 page.jsx
       📁 inventory
+         📁 add-stock
+            📄 page.jsx
          📄 page.jsx
       📄 layout.jsx
       📁 login
@@ -203,6 +217,36 @@
    📄 StoreProvider.js
 📁 assets
    📄 assets.js
+   📄 gs_logo.jpg
+   📄 happy_store.webp
+   📄 hero_model_img.png
+   📄 hero_product_img1.png
+   📄 hero_product_img2.png
+   📄 img_1.jpg
+   📄 img_2.jpg
+   📄 img_3.jpg
+   📄 img_4.jpg
+   📄 img_5.jpg
+   📄 product_img1.png
+   📄 product_img10.png
+   📄 product_img11.png
+   📄 product_img12.png
+   📄 product_img13.png
+   📄 product_img14.png
+   📄 product_img15.png
+   📄 product_img16.png
+   📄 product_img2.png
+   📄 product_img3.png
+   📄 product_img4.png
+   📄 product_img5.png
+   📄 product_img6.png
+   📄 product_img7.png
+   📄 product_img8.png
+   📄 product_img9.png
+   📄 profile_pic1.jpg
+   📄 profile_pic2.jpg
+   📄 profile_pic3.jpg
+   📄 upload_area.svg
 📄 checkdb.mjs
 📄 checkSales.mjs
 📁 components
@@ -253,6 +297,7 @@
 📁 configs
    📄 imageKit.js
    📄 openai.js
+📄 demo.js
 📄 fixSales.mjs
 📄 How_To_Run_Project.pdf
 📁 inngest
@@ -290,6 +335,32 @@
 📄 postcss.config.mjs
 📁 prisma
    📁 migrations
+      📁 20260323154144_init
+         📄 migration.sql
+      📁 20260327134656_add_key_features
+         📄 migration.sql
+      📁 20260328122814_add_createdby_to_category
+         📄 migration.sql
+      📁 20260329045724_scoped_categories_and_products
+         📄 migration.sql
+      📁 20260407081333_add_store_settings
+         📄 migration.sql
+      📁 20260407121038_add_billing_and_barcode
+         📄 migration.sql
+      📁 20260408171746_add_product_variants
+         📄 migration.sql
+      📁 20260419054434_add_employee_id_to_bill_and_sale
+         📄 migration.sql
+      📁 20260422074532_add_paid_amount_to_bill
+         📄 migration.sql
+      📁 20260428171516_remove_product_price_add_store_size
+         📄 migration.sql
+      📁 20260429111325_add_soft_delete
+         📄 migration.sql
+      📁 20260515063033_add_product_batch
+         📄 migration.sql
+      📁 20260515110132_make_expiry_optional
+         📄 migration.sql
       📄 migration_lock.toml
    📄 schema.prisma
 📄 README.md

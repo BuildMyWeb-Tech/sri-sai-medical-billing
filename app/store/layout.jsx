@@ -2,8 +2,8 @@
 import StoreLayout from '@/components/store/StoreLayout';
 
 export const metadata = {
-    title: "Sri Sai Medical Surgical Store",
-  description: 'Sri Sai Medical Surgical Store - Store Dashboard',
+    title: "Sree Sai Medical Surgical Store",
+  description: 'Sree Sai Medical Surgical Store - Store Dashboard',
 };
 
 // No more SignedIn/SignedOut split.

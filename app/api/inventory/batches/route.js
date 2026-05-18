@@ -68,7 +68,12 @@ const batches = await prisma.productBatch.findMany({
     remainingQty: { gt: 0 },
     product: { storeId },
     // If variantId provided directly — most specific filter
-    ...(variantIdFilter ? { variantId: variantIdFilter } : {}),
+...(variantIdFilter ? {
+  OR: [
+    { variantId: variantIdFilter },
+    { variantId: { startsWith: variantIdFilter + '_' } },
+  ]
+} : {}),
     ...(search && !variantIdFilter ? {
       product: {
         storeId,
@@ -80,17 +85,21 @@ const batches = await prisma.productBatch.findMany({
     } : {}),
     ...expiryWhere,
   },
-      select: {
-    id:           true,
-    batchNumber:  true,
-    expiryDate:   true,
-    quantity:     true,
-    remainingQty: true,
-    createdAt:    true,
-    product: { select: { id: true, name: true } },
-    variant: { select: { id: true, size: true } },
-  },
- orderBy: { expiryDate: 'asc' },
+     select: {
+  id:           true,
+  variantId:    true,
+  batchNumber:  true,
+  expiryDate:   true,
+  quantity:     true,
+  remainingQty: true,
+  createdAt:    true,
+  product: { select: { id: true, name: true } },
+  variant: { select: { id: true, size: true } },
+},
+ orderBy: [
+  { expiryDate: 'asc' },
+  { createdAt: 'asc' },
+],
   skip: skipParam,
   take: limitParam,
 });

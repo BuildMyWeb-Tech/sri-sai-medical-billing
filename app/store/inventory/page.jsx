@@ -545,19 +545,26 @@ useEffect(() => {
   setSearch={setBatchSearch}
   onSearch={() => mutateBatches()}
     onEdit={(batch) => setEditingBatch(batch)}
-    onDelete={async (batchId) => {
-      if (!confirm('Delete this batch? This cannot be undone.')) return;
-      try {
-        const token = await getToken();
-        await axios.delete(`/api/inventory/batch/${batchId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-       toast.success('Batch deleted');
-       refreshAll();
-      } catch (err) {
-        toast.error(err?.response?.data?.error || 'Delete failed');
-      }
-    }}
+   // AFTER
+onDelete={async (batchId) => {
+  if (!confirm('Delete this batch? This cannot be undone.')) return;
+  try {
+    const token = await getToken();
+    // Optimistic: remove row instantly from SWR cache before API call
+    mutateBatches((current) => (current || []).filter((b) => b.id !== batchId), false);
+    await axios.delete(`/api/inventory/batch/${batchId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    toast.success('Batch deleted');
+    // Background revalidation — no await
+    mutate();
+    mutateBatches();
+  } catch (err) {
+    // Revert optimistic update on failure
+    mutateBatches();
+    toast.error(err?.response?.data?.error || 'Delete failed');
+  }
+}}
   />
 )}
         {editingBatch && (

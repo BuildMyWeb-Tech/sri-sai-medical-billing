@@ -101,11 +101,7 @@ export async function POST(request) {
         // ─────────────────────────────
 
         if (item.variantId) {
-          const cleanId =
-            item.variantId.includes('_') &&
-            item.variantId.length > 30
-              ? item.variantId.split('_')[0]
-              : item.variantId;
+          const cleanId = String(item.variantId).split('_')[0];
 
           await prisma.$transaction(async (tx) => {
 
@@ -146,54 +142,28 @@ export async function POST(request) {
             // ─────────────────────
 
             if (item.batchId) {
-              const batch =
-                await tx.productBatch.findUnique({
-                  where: {
-                    id: item.batchId,
-                  },
-                  select: {
-                    id: true,
-                    variantId: true,
-                    remainingQty: true,
-                  },
-                });
+  console.log('[DEDUCT] Looking for batchId:', item.batchId);
+  
+  const batch = await tx.productBatch.findUnique({
+    where: { id: item.batchId },
+    select: { id: true, variantId: true, remainingQty: true },
+  });
 
-              if (!batch) {
-                throw new Error(
-                  'Batch not found'
-                );
-              }
+  console.log('[DEDUCT] Batch found:', batch);
 
-             if (batch.variantId && batch.variantId !== cleanId) {
-  console.warn(
-    `[DEDUCT] Batch variantId mismatch. Batch: ${batch.variantId}, Item: ${cleanId}. Allowing deduction.`
-  );
-  // Don't throw — still deduct. Mismatch can happen due to data migration.
+  if (!batch) { throw new Error('Batch not found: ' + item.batchId); }
+
+  if (batch.remainingQty < deductQty) {
+    throw new Error(`Insufficient batch qty. Available: ${batch.remainingQty}, Needed: ${deductQty}`);
+  }
+
+  await tx.productBatch.update({
+    where: { id: item.batchId },
+    data: { remainingQty: { decrement: deductQty } },
+  });
+  
+  console.log('[DEDUCT] Batch decremented by', deductQty);
 }
-
-              if (
-                batch.remainingQty < deductQty
-              ) {
-                throw new Error(
-                  `Insufficient batch quantity. Available: ${batch.remainingQty}`
-                );
-              }
-
-              // ─────────────────
-              // DEDUCT BATCH
-              // ─────────────────
-
-              await tx.productBatch.update({
-                where: {
-                  id: item.batchId,
-                },
-                data: {
-                  remainingQty: {
-                    decrement: deductQty,
-                  },
-                },
-              });
-            }
 
             // ─────────────────────
             // DEDUCT VARIANT STOCK

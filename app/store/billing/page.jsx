@@ -400,9 +400,12 @@ const load = async () => {
     console.log('[EXPIRY POPUP] API returned batches:', data.batches?.length, data.batches);
 
     // Filter by clean variantId and remainingQty > 0
-    const filtered = (data.batches || []).filter(
-      (b) => String(b.variantId) === cleanVariantId && b.remainingQty > 0
-    );
+const filtered = (data.batches || []).filter((b) => {
+  // b.variantId is now returned by API
+  // Support both clean IDs and legacy suffixed IDs
+  const bClean = String(b.variantId || '').split('_')[0];
+  return bClean === cleanVariantId && b.remainingQty > 0;
+});
     console.log('[EXPIRY POPUP] Filtered batches:', filtered.length, filtered);
     setBatches(filtered);
   } catch (err) {
@@ -1187,8 +1190,10 @@ const buildCartItem = (product, variant) => {
   }
 
   setCartItems(prev => {
-    const existingIdx = prev.findIndex(i => i.variantId === variant.id);
-
+const existingIdx = prev.findIndex(i => 
+  i.variantId === String(variant.id).split('_')[0] && 
+  i.batchId === (variant.batchId || null)
+);
     if (existingIdx >= 0) {
       setDuplicateModal({ product, variant, existingIdx });
       return prev;
@@ -1242,12 +1247,16 @@ const handleProductSelectedFromSearch = (product) => {
   const token = getStoreToken(); // or getEmpToken() in employee file
   product.variants.forEach((v) => {
     if (!batchCacheRef.current[v.id]) {
-      fetch(`/api/inventory/batches?search=${encodeURIComponent(product.name)}`, {
+        fetch(`/api/inventory/batches?variantId=${encodeURIComponent(String(v.id).split('_')[0])}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
         .then((r) => r.json())
         .then((d) => {
-          const filtered = (d.batches || []).filter((b) => b.variantId === v.id && b.remainingQty > 0);
+          const filtered = (d.batches || []).filter((b) => {
+  const bClean = String(b.variantId || '').split('_')[0];
+  const vClean = String(v.id).split('_')[0];
+  return bClean === vClean && b.remainingQty > 0;
+});
           batchCacheRef.current[v.id] = filtered;
         })
         .catch(() => {});
@@ -1354,31 +1363,30 @@ const handleProductSelectedFromSearch = (product) => {
       setQueueBillIds((prev) => new Set([...prev, localId]));
       if (isOnline) {
         const token = getStoreToken();
-        fetch('/api/inventory/deduct', {
+  const deductItems = cartItems.map((it) => ({
+  productId: it.productId,
+  variantId: String(it.variantId).split('_')[0],
+  quantity:  it.quantity,
+  batchId:   it.batchId || null,
+}));
+
+console.log('[DEDUCT PAYLOAD FULL]', JSON.stringify(deductItems, null, 2));
+// Expected: batchId must NOT be null for batch-selected items
+
+fetch('/api/inventory/deduct', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-body: JSON.stringify({
-  billId: billNumber,
-  items: cartItems.map((it) => {
-    const cleanVariantId = String(it.variantId).split('_')[0];
-    console.log('[DEDUCT PAYLOAD] variantId:', cleanVariantId, 'batchId:', it.batchId, 'qty:', it.quantity);
-    return {
-      productId: it.productId,
-      variantId: cleanVariantId,
-      quantity:  it.quantity,
-      batchId:   it.batchId || null,
-    };
-  }),
-}),
+  body: JSON.stringify({ billId: billNumber, items: deductItems }),
 })
-.then((r) => r.json())
-.then((data) => {
-  const lowStockItems = (data.deducted || []).filter((d) => d.lowStock);
-  if (lowStockItems.length > 0) {
-    showScanFeedback('warning', `⚠ Low stock on ${lowStockItems.length} item(s)`);
-  }
-})
-.catch(console.error);
+  .then((r) => r.json())
+  .then((data) => {
+    console.log('[DEDUCT RESPONSE]', JSON.stringify(data, null, 2));
+    const lowStockItems = (data.deducted || []).filter((d) => d.lowStock);
+    if (lowStockItems.length > 0) {
+      showScanFeedback('warning', `⚠ Low stock on ${lowStockItems.length} item(s)`);
+    }
+  })
+  .catch(console.error);
       }
       setSuccessBill(billData);
       await refreshQueueCount();

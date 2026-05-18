@@ -445,7 +445,7 @@ useEffect(() => {
 
         {/* Tab switcher */}
 <div className="flex items-center gap-2 mb-4">
-{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: '📦 Batch View' }].map(({ key, label }) => (
+{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: 'Batch View' }].map(({ key, label }) => (
  <button
   key={key}
   onClick={() => setActiveView(key)}

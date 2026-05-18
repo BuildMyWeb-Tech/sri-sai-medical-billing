@@ -327,54 +327,13 @@ export default function EmployeeManageProductPage() {
               </select>
               <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
-            <button onClick={() => setShowFilters((v) => !v)}
+            {/* <button onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${hasActive ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
               <SlidersHorizontal size={14} /> Filters {hasActive && <span className="w-2 h-2 bg-indigo-500 rounded-full" />}
-            </button>
+            </button> */}
           </div>
 
-          {showFilters && (
-            <div className="border-t border-slate-100 px-4 py-3 bg-slate-50 flex flex-wrap gap-4 items-end">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Stock</label>
-                <div className="flex gap-2">
-                  {[['all', 'All'], ['low', 'Low Stock'], ['out', 'Out of Stock']].map(([val, label]) => (
-                    <button key={val} onClick={() => updateFilter({ stock: val })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.stock === val ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200'}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</label>
-                <div className="flex gap-2">
-                  {[['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive']].map(([val, label]) => (
-                    <button key={val} onClick={() => updateFilter({ status: val })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.status === val ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200'}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Price Range (₹)</label>
-                <div className="flex items-center gap-2">
-                  <input type="number" min="0" placeholder="Min" value={filters.minPrice} onChange={(e) => updateFilter({ minPrice: e.target.value })}
-                    className="w-24 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-100" />
-                  <span className="text-slate-400 text-xs">to</span>
-                  <input type="number" min="0" placeholder="Max" value={filters.maxPrice} onChange={(e) => updateFilter({ maxPrice: e.target.value })}
-                    className="w-24 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-100" />
-                </div>
-              </div>
-              {hasActive && (
-                <button onClick={resetFilters} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
-                  <X size={12} /> Reset
-                </button>
-              )}
-              <p className="text-xs text-slate-400 ml-auto self-end">{sorted.length} of {allProducts.length} shown</p>
-            </div>
-          )}
+         
         </div>
 
         {/* Table */}

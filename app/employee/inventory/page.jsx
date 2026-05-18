@@ -262,7 +262,7 @@ function BatchView({ batches, loading, search, setSearch, onSearch }) {
 
         {/* Tab switcher */}
 <div className="flex items-center gap-2 mb-4">
-{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: '📦 Batch View' }].map(({ key, label }) => (
+{[{ key: 'stock', label: 'Stock Overview' }, { key: 'batch', label: 'Batch View' }].map(({ key, label }) => (
   <button key={key} onClick={() => {
     setActiveView(key);
     if (key === 'batch' && batches.length === 0) fetchBatches(); // only fetch if not already loaded

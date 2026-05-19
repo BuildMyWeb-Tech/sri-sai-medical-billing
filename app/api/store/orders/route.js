@@ -84,7 +84,7 @@ async function restoreInventory(tx, orderId) {
           productId: item.productId,
           storeId: order.storeId,
           quantity: newQty,
-          lowStock: 10,
+          lowStock: 5,
         },
       });
     }

@@ -35,7 +35,7 @@ const defaultSettings = {
   showStoreName: true,
   showGST: true,
   footerMessage: 'Thank you for shopping with us!',
-  defaultLowStock: 10,
+  defaultLowStock: 5,
 };
 
 export default function StoreSettingsPage() {

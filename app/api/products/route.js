@@ -40,8 +40,8 @@ export async function GET(request) {
     const category = searchParams.get('category');
     const search = searchParams.get('search');
     const filterStoreId = searchParams.get('storeId');
-    const limit = Math.min(500, parseInt(searchParams.get('limit') || '50'));
-
+const limitParam = searchParams.get('limit');
+const limit = limitParam ? Math.min(5000, parseInt(limitParam)) : undefined;
     let where = {};
 
     if (role === 'ADMIN') {
@@ -75,48 +75,49 @@ export async function GET(request) {
     if (filterStoreId) where.storeId = filterStoreId;
 
     const products = await prisma.product.findMany({
-      where,
+  where,
+  select: {
+    id: true,
+    name: true,
+    mrp: true,
+    images: true,
+    category: true,
+    quantity: true,
+    inStock: true,
+    storeId: true,
+    sku: true,
+    createdBy: true,
+    createdAt: true,
+    variants: {
       select: {
         id: true,
-        name: true,
-        mrp: true,
-        images: true,
-        category: true,
-        quantity: true,
-        inStock: true,
-        storeId: true,
-        sku: true,
-        createdBy: true,
-        createdAt: true,
-        variants: {
-          select: {
-            id: true,
-            size: true,
-            price: true,
-            stock: true,
-            barcode: true,
-          },
-        },
-        rating: {
-          select: {
-            id: true,
-            rating: true,
-            review: true,
-            userId: true,
-            createdAt: true,
-          },
-        },
-        store: {
-          select: {
-            name: true,
-            username: true,
-            logo: true,
-          },
-        },
+        size: true,
+        price: true,
+        stock: true,
+        barcode: true,
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    },
+    rating: {
+      select: {
+        id: true,
+        rating: true,
+        review: true,
+        userId: true,
+        createdAt: true,
+      },
+    },
+    store: {
+      select: {
+        name: true,
+        username: true,
+        logo: true,
+      },
+    },
+  },
+  orderBy: { createdAt: 'desc' },
+
+  ...(limit ? { take: limit } : {}),
+});
 
     const productsWithBadge = products.map((p) => ({
       ...p,

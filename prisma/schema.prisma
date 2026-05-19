@@ -74,7 +74,7 @@ model ProductVariant {
 
   size      String
   price     Float
-  barcode   String  @unique
+  barcode   String?  // Nullable: supports missing barcodes and future auto-generated ones
   stock     Int     @default(0)
 
   createdAt DateTime @default(now())
@@ -85,7 +85,7 @@ model ProductVariant {
   billItems BillItem[]
 
   @@index([productId])
-  @@index([barcode])
+  @@index([barcode])  // Keep index for fast lookup — uniqueness is now enforced in app logic
   @@index([stock])
 }
 
@@ -385,4 +385,7 @@ model ProductBatch {
   @@index([variantId])
   @@index([expiryDate])
   @@index([remainingQty])
+  @@index([productId, expiryDate])
+@@index([remainingQty, expiryDate])
+@@index([batchNumber])
 }

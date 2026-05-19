@@ -216,22 +216,43 @@ export async function GET(request) {
     // ─────────────────────────────────────────
     // BARCODE DIRECT MATCH
     // ─────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // BARCODE DIRECT MATCH
+    // Supports duplicate barcodes across products/variants.
+    // Returns BARCODE_SINGLE (1 match → auto-add) or
+    // BARCODE_DUPLICATE (>1 matches → show picker modal).
+    // ─────────────────────────────────────────
     if (search) {
-      const exactBarcodeProducts =
-        products.filter((product) =>
-          product.variants?.some(
-            (variant) =>
-              String(
-                variant.barcode || ''
-              ).trim() === search
-          )
-        );
+      // Collect all { product, variant } pairs that exactly match this barcode
+      const barcodeMatches = [];
+      for (const product of products) {
+        for (const variant of product.variants || []) {
+          if (String(variant.barcode || '').trim() === search) {
+            barcodeMatches.push({ product, variant });
+          }
+        }
+      }
 
-      if (exactBarcodeProducts.length > 0) {
+      if (barcodeMatches.length === 1) {
+        // Exactly one match — caller can auto-add without showing a picker
         return NextResponse.json({
-          type: 'BARCODE_MATCH',
+          type: 'BARCODE_SINGLE',
           role,
-          products: exactBarcodeProducts,
+          product: barcodeMatches[0].product,
+          variant: barcodeMatches[0].variant,
+        });
+      }
+
+      if (barcodeMatches.length > 1) {
+        // Multiple matches — caller must show a disambiguation modal
+        return NextResponse.json({
+          type: 'BARCODE_DUPLICATE',
+          role,
+          barcode: search,
+          matches: barcodeMatches.map(({ product, variant }) => ({
+            product,
+            variant,
+          })),
         });
       }
     }

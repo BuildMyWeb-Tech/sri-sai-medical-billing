@@ -972,6 +972,74 @@ function PrintSettingsModal({ onClose, printerName, onPrinterChange, qzStatus })
   );
 }
 
+// ─── Barcode Duplicate Modal ──────────────────────────────────────────────────
+// Shown when a scanned barcode maps to multiple products/variants.
+// Employee picks the correct one and billing continues normally.
+function BarcodeDuplicateModal({ barcode, matches, onSelect, onClose }) {
+  return (
+    <ModalWrapper>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+            <AlertCircle size={20} className="text-amber-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">Multiple Products Found</h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-mono">Barcode: {barcode}</p>
+          </div>
+          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500 mb-3">
+          This barcode is linked to {matches.length} products. Select the correct one:
+        </p>
+
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {matches.map(({ product, variant }, i) => (
+            <button
+              key={`${product.id}_${variant.id}`}
+              onClick={() => onSelect(product, variant)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-indigo-200 bg-white text-left hover:border-indigo-400 hover:bg-indigo-50 transition-all"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{product.name}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {variant.size && (
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-bold">
+                      {variant.size}
+                    </span>
+                  )}
+                  <span className="text-xs text-indigo-600 font-medium">
+                    ₹{Number(variant.price).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2 ${
+                variant.stock === 0
+                  ? 'bg-red-50 text-red-500'
+                  : variant.stock < 5
+                  ? 'bg-amber-50 text-amber-600'
+                  : 'bg-green-50 text-green-600'
+              }`}>
+                {variant.stock === 0 ? 'Out of stock' : `${variant.stock} left`}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-4 py-2.5 text-slate-400 hover:text-slate-600 text-sm border border-slate-200 rounded-xl hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </ModalWrapper>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ══ MAIN COMPONENT ════════════════════════════════════════════════════════════
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1024,6 +1092,8 @@ const [paidAmount, setPaidAmount]           = useState('');
   const [queueBillIds, setQueueBillIds]       = useState(new Set());
   const [expiryBatchModal, setExpiryBatchModal] = useState(null);
 const [pendingVariants, setPendingVariants] = useState([]); // queue for multi-size expiry
+  const [barcodeDuplicateModal, setBarcodeDuplicateModal] = useState(null); // { barcode, matches: [{product,variant}] }
+
   const syncTimerRef  = useRef(null);
   const historyTimer  = useRef(null);
   const feedbackTimer = useRef(null);
@@ -1297,17 +1367,27 @@ const existingIdx = prev.findIndex(i =>
 const handleBarcodeScanned = useCallback(async (barcode) => {
   if (!barcode) return;
   const trimmed = barcode.trim();
-  // Try sync first (O(1)), fall back to async server lookup if cache miss
-  let found = findByBarcodeLocal(trimmed);
-  if (!found) {
-    found = await findVariantByBarcode(trimmed, { storeId: STORE_ID, token: getStoreToken() });
+
+  // Try sync cache first (returns array), fall back to async server lookup
+  let matches = findByBarcodeLocal(trimmed); // now returns []
+  if (!matches.length) {
+    matches = await findVariantByBarcode(trimmed, { storeId: STORE_ID, token: getStoreToken() });
   }
-if (!found || !found.product || !found.variant) {
+
+  if (!matches.length) {
     showScanFeedback('error', `Unknown barcode: ${trimmed}`);
     return;
   }
+
   setSuggestions([]);
-  addVariantToCart(found.product, found.variant);
+
+  if (matches.length === 1) {
+    // Single match — auto-add directly, no modal needed
+    addVariantToCart(matches[0].product, matches[0].variant);
+  } else {
+    // Multiple matches — show disambiguation modal
+    setBarcodeDuplicateModal({ barcode: trimmed, matches });
+  }
 }, [addVariantToCart, showScanFeedback]);
 
  // Add near top of component, after state declarations:
@@ -1612,7 +1692,7 @@ setTimeout(async () => {
               </div>
               <CombinedInput
                 onScan={handleBarcodeScanned} onSearch={handleSearch}
-                disabled={!!duplicateModal || !!sizePickerModal || !!expiryBatchModal || pendingVariants.length > 0 || !!showPrintSettings || activeTab !== 'billing'}
+                disabled={!!duplicateModal || !!sizePickerModal || !!expiryBatchModal || !!barcodeDuplicateModal || pendingVariants.length > 0 || !!showPrintSettings || activeTab !== 'billing'}
                 searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
                 searchLoading={false} />
             </div>
@@ -2063,6 +2143,20 @@ onClose={() => {
   />
 )}
 
+
+   {/* ── BARCODE DUPLICATE MODAL ──────────────────────────── */}
+      {barcodeDuplicateModal && (
+        <BarcodeDuplicateModal
+          barcode={barcodeDuplicateModal.barcode}
+          matches={barcodeDuplicateModal.matches}
+          onSelect={(product, variant) => {
+            setBarcodeDuplicateModal(null);
+            // Route through size picker → expiry batch flow normally
+            setSizePickerModal({ ...product, variants: [variant] });
+          }}
+          onClose={() => setBarcodeDuplicateModal(null)}
+        />
+      )}
 
       {/* ── PRINT SETTINGS MODAL ─────────────────────────────── */}
       {showPrintSettings && (

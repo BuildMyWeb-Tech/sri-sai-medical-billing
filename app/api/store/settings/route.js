@@ -139,7 +139,7 @@ export async function GET(request) {
           showStoreName: true,
           showGST: true,
           footerMessage: 'Thank you for shopping with us!',
-          defaultLowStock: 10,
+          defaultLowStock: 5,
         },
       });
     }

@@ -40,7 +40,7 @@ export async function GET(request) {
    const { searchParams } = new URL(request.url);
 const search        = searchParams.get('search') || '';
 const pageParam     = parseInt(searchParams.get('page') || '1');
-const limitParam    = Math.min(parseInt(searchParams.get('limit') || '100'), 200);
+const limitParam = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
 const skipParam     = (pageParam - 1) * limitParam;
     const batchSearch = searchParams.get('batch') || '';
     const expiryFilter = searchParams.get('expiry') || ''; // 'expired' | 'critical' | 'soon' | ''
@@ -117,16 +117,36 @@ const batches = await prisma.productBatch.findMany({
   return { ...b, status };
 });
 
-    // ── Expiry summary counts for dashboard widgets ───────────
-    const allBatches = await prisma.productBatch.findMany({
-      where: { product: { storeId }, remainingQty: { gt: 0 } },
-      select: { expiryDate: true, remainingQty: true },
-    });
+const [expired, critical, soon] = await Promise.all([
+  prisma.productBatch.count({
+    where: {
+      remainingQty: { gt: 0 },
+      product: { storeId },
+      expiryDate: { not: null, lt: now },
+    },
+  }),
 
-    const expirySummary = {
-  expired:  allBatches.filter(b => b.expiryDate && new Date(b.expiryDate) < now).length,
-  critical: allBatches.filter(b => { if (!b.expiryDate) return false; const d = new Date(b.expiryDate); return d >= now && d <= in7days; }).length,
-  soon:     allBatches.filter(b => { if (!b.expiryDate) return false; const d = new Date(b.expiryDate); return d >= now && d <= in30days; }).length,
+  prisma.productBatch.count({
+    where: {
+      remainingQty: { gt: 0 },
+      product: { storeId },
+      expiryDate: { not: null, gte: now, lte: in7days },
+    },
+  }),
+
+  prisma.productBatch.count({
+    where: {
+      remainingQty: { gt: 0 },
+      product: { storeId },
+      expiryDate: { not: null, gte: now, lte: in30days },
+    },
+  }),
+]);
+
+const expirySummary = {
+  expired,
+  critical,
+  soon,
 };
 
     return NextResponse.json({

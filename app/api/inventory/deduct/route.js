@@ -235,7 +235,7 @@ export async function POST(request) {
                   variant.productId,
                 storeId,
                 quantity: totalStock,
-                lowStock: 10,
+                lowStock: 5,
               },
             });
 

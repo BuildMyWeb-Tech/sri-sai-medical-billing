@@ -339,19 +339,19 @@ const batchFetcher = useCallback(async (url) => {
 }, [getToken]);
 
 const batchSWRKey =
-  activeView === 'batch'
-    ? `/api/inventory/batches${
-        batchSearch ? `?search=${batchSearch}` : ''
-      }`
-    : null;
+  `/api/inventory/batches${
+    batchSearch ? `?search=${batchSearch}` : ''
+  }`;
 
 const {
   data: batches = [],
+  isValidating: batchValidating,
   isLoading: batchLoading,
   mutate: mutateBatches,
 } = useSWR(batchSWRKey, batchFetcher, {
   revalidateOnFocus: false,
   dedupingInterval: 10000,
+  keepPreviousData: true,
 });
 
   const fetcher = useCallback(async () => {

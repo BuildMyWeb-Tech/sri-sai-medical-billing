@@ -167,7 +167,7 @@ function ExpiryDetailTable() {
     { key: 'expired', label: '🔴 Expired' },
     { key: 'critical', label: '🔴 7 Days' },
     { key: 'soon', label: '🟡 30 Days' },
-    { key: 'none', label: '⚪ No Expiry' },
+    // { key: 'none', label: '⚪ No Expiry' },
   ];
 
   useEffect(() => {

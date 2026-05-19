@@ -584,7 +584,7 @@ const daysLabel = () => {
       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all text-left ${colors.btn}`}>
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isSel && <CheckCircle size={13} className="text-indigo-600" />}
+          {isSel && <CheckCircle size={13} className="text-blue-600" />}
           <span className="font-semibold">
             {expDate
               ? `Exp: ${expDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
@@ -611,7 +611,7 @@ const daysLabel = () => {
             Cancel
           </button>
           <button onClick={() => selected && onConfirm(selected)} disabled={!selected}
-            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold ${selected ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold ${selected ? 'bg-blue-600 hover:bg-indigo-700 text-white' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
             Confirm
           </button>
         </div>
@@ -768,13 +768,13 @@ const handleChange = (e) => {
                 <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {(p.variants || []).map((v) => (
-                    <span key={v.id} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${v.stock === 0 ? 'bg-red-50 text-red-400' : 'bg-indigo-50 text-indigo-600'}`}>
+                    <span key={v.id} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${v.stock === 0 ? 'bg-red-50 text-red-400' : 'bg-indigo-50 text-blue-600'}`}>
                       {v.size} ₹{v.price}
                     </span>
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium flex-shrink-0">
+              <div className="flex items-center gap-1 text-xs text-blue-600 font-medium flex-shrink-0">
                 <Layers size={10} /> {(p.variants || []).length} sizes
               </div>
             </button>
@@ -801,7 +801,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center"><Layers size={20} className="text-indigo-600" /></div>
+          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center"><Layers size={20} className="text-blue-600" /></div>
           <div><h3 className="font-bold text-slate-800">Select Size</h3><p className="text-xs text-slate-500 mt-0.5">{product.name}</p></div>
           <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
         </div>
@@ -813,13 +813,13 @@ function SizePickerModal({ product, onConfirm, onClose }) {
               const isOut = v.stock === 0; const sel = isSelected(v);
               return (
                 <button key={v.id} onClick={() => toggleVariant(v)} disabled={isOut}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${isOut ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' : sel ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200' : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50'}`}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${isOut ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' : sel ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200' : 'border-blue-200 bg-white text-indigo-700 hover:border-blue-400 hover:bg-blue-50'}`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center justify-center w-10 h-8 rounded-lg text-xs font-bold transition-all ${isOut ? 'bg-slate-100 text-slate-300' : sel ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
+                    <span className={`inline-flex items-center justify-center w-10 h-8 rounded-lg text-xs font-bold transition-all ${isOut ? 'bg-slate-100 text-slate-300' : sel ? 'bg-blue-600 text-white' : 'bg-indigo-100 text-blue-600'}`}>
                       {sel ? <CheckCircle size={14} /> : v.size}
                     </span>
-                    <div className="text-left"><span className="font-semibold">{v.size}</span><span className="ml-2 text-indigo-600">₹{Number(v.price).toLocaleString('en-IN')}</span></div>
+                    <div className="text-left"><span className="font-semibold">{v.size}</span><span className="ml-2 text-blue-600">₹{Number(v.price).toLocaleString('en-IN')}</span></div>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOut ? 'bg-red-50 text-red-500' : v.stock < 5 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
                     {isOut ? 'Out of stock' : `${v.stock} left`}
@@ -832,7 +832,7 @@ function SizePickerModal({ product, onConfirm, onClose }) {
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2.5 text-slate-500 hover:text-slate-700 text-sm rounded-xl border border-slate-200 hover:bg-slate-50 font-medium">Cancel</button>
           <button onClick={() => { if (selected.length > 0) onConfirm(product, selected); }} disabled={selected.length === 0}
-            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold transition-all ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+            className={`flex-1 py-2.5 text-sm rounded-xl font-semibold transition-all ${selected.length > 0 ? 'bg-blue-600 hover:bg-indigo-700 text-white shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
             {selected.length === 0 ? 'Confirm' : `Confirm (${selected.length} size${selected.length > 1 ? 's' : ''})`}
           </button>
         </div>
@@ -905,6 +905,74 @@ function PrintSettingsModal({ onClose, printerName, onPrinterChange, qzStatus })
   );
 }
 
+// ─── Barcode Duplicate Modal ──────────────────────────────────────────────────
+// Shown when a scanned barcode maps to multiple products/variants.
+// Employee picks the correct one and billing continues normally.
+function BarcodeDuplicateModal({ barcode, matches, onSelect, onClose }) {
+  return (
+    <ModalWrapper>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+            <AlertCircle size={20} className="text-amber-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">Multiple Products Found</h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-mono">Barcode: {barcode}</p>
+          </div>
+          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500 mb-3">
+          This barcode is linked to {matches.length} products. Select the correct one:
+        </p>
+
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {matches.map(({ product, variant }, i) => (
+            <button
+              key={`${product.id}_${variant.id}`}
+              onClick={() => onSelect(product, variant)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-blue-200 bg-white text-left hover:border-blue-400 hover:bg-blue-50 transition-all"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{product.name}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {variant.size && (
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-bold">
+                      {variant.size}
+                    </span>
+                  )}
+                  <span className="text-xs text-blue-600 font-medium">
+                    ₹{Number(variant.price).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2 ${
+                variant.stock === 0
+                  ? 'bg-red-50 text-red-500'
+                  : variant.stock < 5
+                  ? 'bg-amber-50 text-amber-600'
+                  : 'bg-green-50 text-green-600'
+              }`}>
+                {variant.stock === 0 ? 'Out of stock' : `${variant.stock} left`}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-4 py-2.5 text-slate-400 hover:text-slate-600 text-sm border border-slate-200 rounded-xl hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </ModalWrapper>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ══ MAIN COMPONENT ═══════════════════════════════════════════════════════════
 // ─────────────────────────────────────────────────────────────────────────────
@@ -960,6 +1028,8 @@ const [paidAmount, setPaidAmount]             = useState('');
   const [queueBillIds, setQueueBillIds]       = useState(new Set());
   const [expiryBatchModal, setExpiryBatchModal] = useState(null);
   const [pendingVariants, setPendingVariants] = useState([]); // queue for multi-size expiry
+    const [barcodeDuplicateModal, setBarcodeDuplicateModal] = useState(null); // { barcode, matches: [{product,variant}] }
+
 
   const syncTimerRef  = useRef(null);
   const historyTimer  = useRef(null);
@@ -1257,16 +1327,27 @@ const addVariantToCart = useCallback((product, variant) => {
 const handleBarcodeScanned = useCallback(async (barcode) => {
   if (!barcode) return;
   const trimmed = barcode.trim();
-  let found = findByBarcodeLocal(trimmed);
-  if (!found) {
-    found = await findVariantByBarcode(trimmed, { storeId: 'default', token: getEmpToken() });
+
+  // Try sync cache first (returns array), fall back to async server lookup
+  let matches = findByBarcodeLocal(trimmed); // now returns []
+  if (!matches.length) {
+    matches = await findVariantByBarcode(trimmed, { storeId: 'default', token: getEmpToken() });
   }
-  if (!found || !found.product || !found.variant) {
+
+  if (!matches.length) {
     showScanFeedback('error', `Unknown barcode: ${trimmed}`);
     return;
   }
-  setSuggestions([]); // clear stale search results before adding
-  addVariantToCart(found.product, found.variant);
+
+  setSuggestions([]);
+
+  if (matches.length === 1) {
+    // Single match — auto-add directly, no modal needed
+    addVariantToCart(matches[0].product, matches[0].variant);
+  } else {
+    // Multiple matches — show disambiguation modal
+    setBarcodeDuplicateModal({ barcode: trimmed, matches });
+  }
 }, [addVariantToCart, showScanFeedback]);
 
 // Add near top of component, after state declarations:
@@ -1556,8 +1637,8 @@ setTimeout(async () => {
       w        </div>
               <CombinedInput
                 onScan={handleBarcodeScanned} onSearch={handleSearch}
-disabled={!!duplicateModal || !!sizePickerModal || !!expiryBatchModal || pendingVariants.length > 0 || !!showPrintSettings || activeTab !== 'billing'}
-searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
+disabled={!!duplicateModal || !!sizePickerModal || !!expiryBatchModal || !!barcodeDuplicateModal || pendingVariants.length > 0 || !!showPrintSettings || activeTab !== 'billing'}
+                searchResults={suggestions} onSelectProduct={handleProductSelectedFromSearch}
                 searchLoading={false}
               />
             </div>
@@ -1984,6 +2065,20 @@ onClose={() => {
   />
 )}
 
+
+     {/* ── BARCODE DUPLICATE MODAL ──────────────────────────── */}
+      {barcodeDuplicateModal && (
+        <BarcodeDuplicateModal
+          barcode={barcodeDuplicateModal.barcode}
+          matches={barcodeDuplicateModal.matches}
+          onSelect={(product, variant) => {
+            setBarcodeDuplicateModal(null);
+            // Route through size picker → expiry batch flow normally
+            setSizePickerModal({ ...product, variants: [variant] });
+          }}
+          onClose={() => setBarcodeDuplicateModal(null)}
+        />
+      )}
 
       {/* ── PRINT SETTINGS MODAL ─────────────────────────────── */}
       {showPrintSettings && (

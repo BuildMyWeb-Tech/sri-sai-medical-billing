@@ -46,7 +46,7 @@ export async function GET(request) {
 
     // Pagination params (default: page 1, limit 30)
     const page  = Math.max(1, parseInt(searchParams.get('page')  || '1', 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '30', 10)));
+    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '30', 10)));
     const skip  = (page - 1) * limit;
 
     const where = {
@@ -244,7 +244,7 @@ export async function POST(request) {
         productId: product.id,
         storeId,
         quantity: totalQty,
-        lowStock: 10,
+        lowStock: 5,
       },
     });
 
@@ -367,7 +367,7 @@ export async function PUT(request) {
       await tx.inventory.upsert({
         where:  { productId_storeId: { productId, storeId } },
         update: { quantity: syncedQty },
-        create: { productId, storeId, quantity: syncedQty, lowStock: 10 },
+        create: { productId, storeId, quantity: syncedQty, lowStock: 5 },
       });
 
       return prod;

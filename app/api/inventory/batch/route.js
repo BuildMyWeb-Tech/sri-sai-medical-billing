@@ -266,7 +266,7 @@ export async function POST(request) {
             productId,
             storeId,
             quantity: qty,
-            lowStock: 10,
+            lowStock: 5,
           },
         });
       }

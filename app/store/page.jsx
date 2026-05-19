@@ -652,7 +652,7 @@ expirySoon:     0,
      
 
       {/* ── Low Stock Variants (Feature 10) ────────────────────── */}
-      {dash.lowStockVariants && dash.lowStockVariants.length > 0 && (
+      {/* {dash.lowStockVariants && dash.lowStockVariants.length > 0 && (
         <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
           <div className="flex justify-between items-center p-5 border-b border-amber-100 bg-amber-50">
             <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -701,7 +701,7 @@ expirySoon:     0,
             </table>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Orders by Status Bar Chart */}
       {/* <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">

@@ -458,7 +458,7 @@ window.onload=function(){
   if (win) { win.document.write(html); win.document.close(); }
 }
 
-function ExpiryBatchModal({ product, variant, onConfirm, onClose, token }) {
+function ExpiryBatchModal({ product, variant, onConfirm, onClose, token, cacheRef }) {
   const [batches, setBatches]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
@@ -467,27 +467,38 @@ function ExpiryBatchModal({ product, variant, onConfirm, onClose, token }) {
 const load = async () => {
   try {
     const cleanVariantId = String(variant.id).split('_')[0];
-    console.log('[EMP EXPIRY POPUP] token:', token ? token.slice(0, 20) + '...' : 'EMPTY');
-    console.log('[EMP EXPIRY POPUP] Loading batches for variantId:', cleanVariantId, 'product:', product?.name);
 
+    // ── Check ref cache first — instant, no API call ──
+    const refCached = cacheRef?.current?.[variant.id] ?? cacheRef?.current?.[cleanVariantId];
+    if (refCached && refCached.length > 0) {
+      console.log('[EMP EXPIRY POPUP] Using preloaded cache:', refCached.length, 'batches');
+      setBatches(refCached);
+      setLoading(false);
+      return;
+    }
+
+    // ── Cache miss — fetch from API ──
+    console.log('[EMP EXPIRY POPUP] Cache miss, fetching variantId:', cleanVariantId);
     const res = await fetch(
       `/api/inventory/batches?variantId=${encodeURIComponent(cleanVariantId)}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     );
     const data = await res.json();
-    console.log('[EMP EXPIRY POPUP] API status:', res.status);
-    console.log('[EMP EXPIRY POPUP] API returned:', data);
 
-    // Filter by clean variantId and remainingQty > 0
-// AFTER
-const filtered = (data.batches || []).filter((b) => {
-  const bClean = String(b.variantId || b.productVariantId || '').split('_')[0];
-  return (bClean === cleanVariantId || !bClean) && b.remainingQty > 0;
-});
-    console.log('[EXPIRY POPUP] Filtered batches:', filtered.length, filtered);
+    const filtered = (data.batches || []).filter((b) => {
+      const bClean = String(b.variantId || '').split('_')[0];
+      return bClean === cleanVariantId && b.remainingQty > 0;
+    });
+
+    // Store in cache for next time
+    if (cacheRef?.current) {
+      cacheRef.current[variant.id]    = filtered;
+      cacheRef.current[cleanVariantId] = filtered;
+    }
+
     setBatches(filtered);
   } catch (err) {
-    console.error('[EXPIRY POPUP] Load error:', err);
+    console.error('[EMP EXPIRY POPUP] Load error:', err);
     setBatches([]);
   }
   finally { setLoading(false); }

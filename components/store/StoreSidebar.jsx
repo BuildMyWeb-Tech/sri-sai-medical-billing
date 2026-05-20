@@ -25,12 +25,12 @@ import { useState } from 'react';
 
 const ALL_LINKS = [
   { name: 'Dashboard', href: '/store', icon: HomeIcon, permission: null },
-  {
-    name: 'Product Categories',
-    href: '/store/categories',
-    icon: LayoutListIcon,
-    permission: 'inventory',
-  },
+  // {
+  //   name: 'Product Categories',
+  //   href: '/store/categories',
+  //   icon: LayoutListIcon,
+  //   permission: 'inventory',
+  // },
   {
     name: 'Add Product',
     href: '/store/add-product',

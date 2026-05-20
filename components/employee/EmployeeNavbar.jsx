@@ -47,15 +47,15 @@ export default function EmployeeNavbar({ storeInfo, employee, mobileOpen, setMob
           {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
         </button> */}
 
-        <div className="hidden sm:block text-right">
+        {/* <div className="hidden sm:block text-right">
           <p className="text-sm font-medium text-slate-800">{employee?.name}</p>
           <p className="text-xs text-slate-500">{roleLabel}</p>
-        </div>
+        </div> */}
 
         {/* Avatar */}
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+        {/* <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow-sm">
           {avatarLetter}
-        </div>
+        </div> */}
 
         {/* Logout */}
         <button

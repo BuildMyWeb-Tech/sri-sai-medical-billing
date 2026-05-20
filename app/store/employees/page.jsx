@@ -33,7 +33,7 @@ const ALL_PERMISSIONS = [
   { key: 'inventory',          label: 'Inventory',                         Icon: Package },
   // { key: 'orders',             label: 'Orders',                   Icon: ClipboardList },
   { key: 'reports',            label: 'Reports',              Icon: BarChart2 },
-  { key: 'product_categories', label: 'Categories',                  Icon: Tag },
+  // { key: 'product_categories', label: 'Categories',                  Icon: Tag },
   { key: 'manage_product',     label: 'Manage Products',                   Icon: ShoppingBag },
 ];
 

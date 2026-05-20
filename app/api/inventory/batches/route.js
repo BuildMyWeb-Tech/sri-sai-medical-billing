@@ -14,11 +14,12 @@ async function resolveStoreId(request) {
   try { emp = verifyEmployeeToken(request); } catch (_) {}
 
   if (emp?.storeId) {
-    if (!hasPermission(emp, 'inventory')) {
-      return { storeId: null, error: 'No inventory permission' };
-    }
-    return { storeId: emp.storeId };
+  // Allow billing permission too — needed for expiry batch popup during billing
+  if (!hasPermission(emp, 'inventory') && !hasPermission(emp, 'billing')) {
+    return { storeId: null, error: 'No inventory permission' };
   }
+  return { storeId: emp.storeId };
+}
 
   // Fall back to Clerk seller auth
   const { userId } = getAuth(request);

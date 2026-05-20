@@ -464,30 +464,25 @@ function ExpiryBatchModal({ product, variant, onConfirm, onClose, token }) {
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
-  // Add token prop usage and accept cacheRef
-// In the component signature, pass cacheRef:
-// ExpiryBatchModal({ product, variant, onConfirm, onClose, token, cacheRef })
-
 const load = async () => {
   try {
-    // Clean variantId — strip any duplicate suffix
     const cleanVariantId = String(variant.id).split('_')[0];
-    console.log('[EXPIRY POPUP] Loading batches for variantId:', cleanVariantId, 'product:', product?.name);
+    console.log('[EMP EXPIRY POPUP] token:', token ? token.slice(0, 20) + '...' : 'EMPTY');
+    console.log('[EMP EXPIRY POPUP] Loading batches for variantId:', cleanVariantId, 'product:', product?.name);
 
-    // Always fetch fresh from API — skip stale cache
     const res = await fetch(
       `/api/inventory/batches?variantId=${encodeURIComponent(cleanVariantId)}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     );
     const data = await res.json();
-    console.log('[EXPIRY POPUP] API returned batches:', data.batches?.length, data.batches);
+    console.log('[EMP EXPIRY POPUP] API status:', res.status);
+    console.log('[EMP EXPIRY POPUP] API returned:', data);
 
     // Filter by clean variantId and remainingQty > 0
+// AFTER
 const filtered = (data.batches || []).filter((b) => {
-  // b.variantId is now returned by API
-  // Support both clean IDs and legacy suffixed IDs
-  const bClean = String(b.variantId || '').split('_')[0];
-  return bClean === cleanVariantId && b.remainingQty > 0;
+  const bClean = String(b.variantId || b.productVariantId || '').split('_')[0];
+  return (bClean === cleanVariantId || !bClean) && b.remainingQty > 0;
 });
     console.log('[EXPIRY POPUP] Filtered batches:', filtered.length, filtered);
     setBatches(filtered);
